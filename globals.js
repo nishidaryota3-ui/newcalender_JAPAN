@@ -1,3 +1,5 @@
+// globals.js (全体のデータと状態の管理) - 日本版（動的座標）初期化
+
 const container = document.getElementById('container');
 const statusBar = document.getElementById('status-bar');
 
@@ -20,8 +22,10 @@ let globalRotation = 0;
 let calendarData = JSON.parse(localStorage.getItem('polarCalendarDataV27')) || {};
 let concentricRings = []; 
 
-const PALAU_LAT = 7.34;
-const PALAU_LON = 134.48;
+// ▼▼ 変更箇所：パラオ固定を廃止し、動的な座標変数に変更（初期値は東京） ▼▼
+let currentLat = 35.6895; 
+let currentLon = 139.6917;
+let currentLocationName = "東京都"; 
 
 const baseDate = new Date(2026, 7, 13);
 const synodicMonth = 29.530589;
