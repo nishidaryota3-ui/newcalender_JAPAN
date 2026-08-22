@@ -1,3 +1,5 @@
+// main.js (司令塔・初期化モジュール) - ジオコーディング連携準備版
+
 window.defaultLayerSettings = {
     canvasBg: { fill: "#f5f3eb" },
     baseSvg: { stroke: "", opacity: 0.8 },
@@ -116,7 +118,9 @@ async function fetchMeteoData(startDateMs) {
     
     const isHistorical = dEnd.getTime() < Date.now() - (5 * 86400000);
     const baseUrl = isHistorical ? 'https://archive-api.open-meteo.com/v1/archive' : 'https://api.open-meteo.com/v1/forecast';
-    const rainApiUrl = `${baseUrl}?latitude=${PALAU_LAT}&longitude=${PALAU_LON}&hourly=precipitation&start_date=${formatDateStr(dStart)}&end_date=${formatDateStr(dEnd)}&timezone=Asia%2FTokyo`;
+    
+    // ▼▼ 変更箇所：固定値(PALAU_LAT)から、検索された現在地(currentLat)に変更 ▼▼
+    const rainApiUrl = `${baseUrl}?latitude=${currentLat}&longitude=${currentLon}&hourly=precipitation&start_date=${formatDateStr(dStart)}&end_date=${formatDateStr(dEnd)}&timezone=Asia%2FTokyo`;
 
     try {
         const res = await fetch(rainApiUrl);
