@@ -1,3 +1,5 @@
+// ui.js (UI構築・イベントモジュール) - ジオコーディング（位置検索）追加版
+
 const TEXT_TARGETS = ['gregorian', 'weekday', 'sekki', 'kou', 'zassetsu', 'holiday', 'important', 'wafuText', 'gregorianText', 'dailyRainText', 'guideTime', 'guideTideText', 'guideRainText', 'lunarMansion', 'eventShinto', 'eventBuddhism', 'eventChurch', 'eventSonota', 'lunar', 'haikuText'];
 const SHAPE_TARGETS = ['baseSvg', 'lunarShadow', 'astroPins', 'dateLines', 'tideGraph', 'rainGraph', 'dailyRainBg', 'guideTideLine', 'guideRainLine', 'canvasBg'];
 
@@ -35,7 +37,14 @@ function initUI() {
     navDiv.className = 'panel-ui';
     navDiv.id = 'nav-bar';
     navDiv.style = "position:fixed; top:30px; right:30px; background:rgba(25,30,40,0.85); padding:10px 15px; border-radius:8px; color:#d4af37; z-index:100; display:flex; gap:15px; align-items:center; border: 1px solid rgba(212,175,55,0.3); backdrop-filter: blur(10px);";
+    
+    // ▼▼ 変更箇所：観測地検索ボックスの追加 ▼▼
     navDiv.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px; border-right:1px solid rgba(212,175,55,0.3); padding-right:15px;">
+            <span style="font-size:12px; color:#8b949e;">観測地:</span>
+            <input type="text" id="locationInput" placeholder="地名を入力 (例: 鎌倉)" value="${currentLocationName}" style="width:110px; padding:4px; border-radius:4px; border:1px solid #555; background:#222; color:#fff; font-size:12px;">
+            <button id="searchLocationBtn" style="background:#0ea5e9; border:none; color:#fff; padding:4px 8px; cursor:pointer; border-radius:4px; font-weight:bold; font-size:12px;">検索</button>
+        </div>
         <button id="prevBtn" style="background:transparent; border:1px solid #d4af37; color:#d4af37; padding:4px 8px; cursor:pointer; border-radius:4px;">◀</button>
         <div id="cycleDisplay" title="クリックして年月を移動" style="font-weight:bold; font-size:14px; text-align:center; min-width:120px; cursor:pointer; padding:4px; border-radius:4px; transition:background 0.2s;">--</div>
         <button id="nextBtn" style="background:#d4af37; border:none; color:#000; padding:4px 8px; cursor:pointer; border-radius:4px; font-weight:bold;">▶</button>
@@ -642,8 +651,47 @@ function initUI() {
         if (document.getElementById('design-panel').style.display === 'block') loadPanelData();
     };
 
+    // ▼▼ 変更箇所：ジオコーディングAPI（地名から緯度経度を取得）のイベント追加 ▼▼
+    document.getElementById('searchLocationBtn').onclick = async () => {
+        const query = document.getElementById('locationInput').value.trim();
+        if(!query) return;
+        
+        if (typeof loader !== 'undefined') {
+            loader.innerHTML = `☁️ 「${query}」の座標を検索中...`;
+            loader.style.display = 'flex';
+        }
 
-    // ▼▼ 修正箇所：印刷用・画像エクスポート時の表示枠とUI非表示処理 ▼▼
+        try {
+            // Open-Meteoの無料・無登録ジオコーディングAPIを使用
+            const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=ja&format=json`);
+            const data = await res.json();
+            
+            if (data.results && data.results.length > 0) {
+                const loc = data.results[0];
+                currentLat = loc.latitude;
+                currentLon = loc.longitude;
+                currentLocationName = loc.name;
+                document.getElementById('locationInput').value = loc.name;
+                
+                // 座標が更新されたので、カレンダーの気象データを再取得して描画
+                if(typeof updateCalendarCycle === 'function') {
+                    await updateCalendarCycle();
+                }
+            } else {
+                alert(`「${query}」が見つかりませんでした。別の地名でお試しください。`);
+            }
+        } catch(e) {
+            console.error("Geocoding Error:", e);
+            alert('位置情報の検索に失敗しました。');
+        }
+        
+        if (typeof loader !== 'undefined') {
+            loader.innerHTML = "☁️ 観測データを統合中...";
+            loader.style.display = 'none';
+        }
+    };
+    // ▲▲ 追加ここまで ▲▲
+
     const printViewBox = "-304.31 -33.52 2450 2450"; 
 
     const hideUIForOutput = () => {
