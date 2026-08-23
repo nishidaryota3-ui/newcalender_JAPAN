@@ -1,4 +1,4 @@
-// main.js (司令塔・初期化モジュール) - 描画/通信分離・非同期ブロック解消版
+// main.js (司令塔・初期化モジュール) - 完全オフライン（雨CSV対応）版
 
 window.defaultLayerSettings = {
     canvasBg: { fill: "#f5f3eb" },
@@ -110,59 +110,35 @@ let koyomiDatabase = {};
 const KOYOMI_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRqoX31YV0YAO3Mq4WatmLhjP7uUSF6dPMy3D2H3ktEFDFg1X1gJmoIXkul9JpS4aLgK9Ze3SSbV9BZ/pub?gid=0&single=true&output=csv';
 const HAIKU_CSV_URL = 'https://docs.google.com/spreadsheets/d/1m0y8AOJNx1Ad4I44poPheQAQNki1-QQIwi9wSw8jaBg/export?format=csv&gid=126185184';
 
-// ▼ 非同期でデータを取得する関数（描画をブロックしないように修正） ▼
+
+// ★ 外部APIを完全廃止し、潮汐と雨のCSVを読み込んで処理する関数 ★
 async function fetchMeteoAndTideData(startDateMs) {
     const dStart = new Date(startDateMs);
-    const dEnd = new Date(startDateMs + 30 * 86400000);
+    const targetYear = dStart.getFullYear(); 
     
     apiRainData = new Array(720).fill(null);
     localRainData = {}; 
     highLowTidePoints = []; 
     
-    const sDate = formatDateStr(dStart);
-    const eDate = formatDateStr(dEnd);
-    const targetYear = dStart.getFullYear(); 
-
-    const isHistorical = dEnd.getTime() < Date.now() - (5 * 86400000);
-    const weatherBaseUrl = isHistorical ? 'https://archive-api.open-meteo.com/v1/archive' : 'https://api.open-meteo.com/v1/forecast';
-    const rainApiUrl = `${weatherBaseUrl}?latitude=${currentLat}&longitude=${currentLon}&hourly=precipitation&daily=precipitation_sum&start_date=${sDate}&end_date=${eDate}&timezone=Asia%2FTokyo`;
-
-    const fetchRain = async () => {
-        try {
-            const rainRes = await fetch(rainApiUrl);
-            if (rainRes.ok) {
-                const json = await rainRes.json();
-                if(json.hourly && json.hourly.precipitation) {
-                    for(let i=0; i<720; i++) apiRainData[i] = json.hourly.precipitation[i] || 0;
-                }
-                if(json.daily && json.daily.precipitation_sum && json.daily.time) {
-                    json.daily.time.forEach((t, idx) => {
-                        localRainData[standardizeDateKey(t)] = json.daily.precipitation_sum[idx] || 0;
-                    });
-                }
-            }
-        } catch(e) { console.warn("Weather data unavailable."); }
-    };
-
-    const station = TIDE_STATIONS[currentTideStationIndex];
-    const csvFileName = `tides/tide_${station.code}_${targetYear}.csv`; 
     let tideDataFound = false;
+    let rainDataFound = false;
+    const sb = document.getElementById('status-bar');
+
+    // 1. 潮汐データの取得 (tidesフォルダから)
+    const station = TIDE_STATIONS[currentTideStationIndex];
+    const tideCsvName = `tides/tide_${station.code}_${targetYear}.csv`; 
 
     const fetchTide = async () => {
         try {
-            const tideRes = await fetch(csvFileName);
-            if (tideRes.ok) {
-                const tideTxt = await tideRes.text();
-                const lines = tideTxt.split('\n');
-                
-                // パラオ版の変換ツールでは cm を ft に変換して保存していたが、
-                // 新しいツール(日本cm版)は、CSVの中にそのままの cm 数値が入っている想定でパースする
+            const res = await fetch(tideCsvName);
+            if (res.ok) {
+                const txt = await res.text();
+                const lines = txt.split('\n');
                 for (let i = 1; i < lines.length; i++) {
                     const parts = lines[i].split(',');
                     if (parts.length >= 3) {
                         const dateStr = standardizeDateKey(parts[0]);
                         const timeMs = new Date(`${dateStr}T${parts[1].trim()}:00+09:00`).getTime();
-                        
                         if (timeMs >= startDateMs && timeMs <= startDateMs + 30 * 86400000) {
                             const tide = parseFloat(parts[2].trim());
                             if (!isNaN(timeMs) && !isNaN(tide)) {
@@ -176,23 +152,66 @@ async function fetchMeteoAndTideData(startDateMs) {
                     tideDataFound = true;
                 }
             }
-        } catch(e) { console.warn("Tide data unavailable."); }
+        } catch(e) {}
     };
 
-    // 雨と潮汐の取得を並行して実行（どちらかが失敗しても片方は生き残る）
-    await Promise.all([fetchRain(), fetchTide()]);
+    // 2. 雨データの取得 (rainフォルダから)
+    const rainCsvName = `rain/rain_${currentLocationName}_${targetYear}.csv`;
 
-    const sb = document.getElementById('status-bar');
+    const fetchRain = async () => {
+        try {
+            const res = await fetch(rainCsvName);
+            if (res.ok) {
+                const txt = await res.text();
+                const lines = txt.split('\n');
+                
+                const hourlyMap = {};
+
+                for (let i = 1; i < lines.length; i++) {
+                    const parts = lines[i].split(',');
+                    if (parts.length >= 3) {
+                        const dateStr = standardizeDateKey(parts[0]);
+                        const timeStr = parts[1].trim();
+                        const rain = parseFloat(parts[2].trim());
+
+                        if (!isNaN(rain)) {
+                            // ① 24時間分を足し算して「日別総降水量」をプログラムで作る
+                            if (localRainData[dateStr] === undefined) localRainData[dateStr] = 0;
+                            localRainData[dateStr] += rain;
+
+                            // ② タイムスタンプを使って「毎時データ」を記録する
+                            const timeMs = new Date(`${dateStr}T${timeStr}+09:00`).getTime();
+                            hourlyMap[timeMs] = rain;
+                        }
+                    }
+                }
+                
+                // 記録した毎時データを、カレンダーの720時間分に正しく割り当てる（ズレを完全解消）
+                for(let h=0; h<720; h++) {
+                    const tMs = startDateMs + h * 3600000;
+                    apiRainData[h] = hourlyMap[tMs] !== undefined ? hourlyMap[tMs] : null;
+                }
+                rainDataFound = true;
+            }
+        } catch(e) {}
+    };
+
+    // 潮と雨のCSVを並行して読み込む
+    await Promise.all([fetchTide(), fetchRain()]);
+
+    // 読み込み結果をステータスバーに表示（エラーでクラッシュさせない設計）
     if (sb) {
-        if (!tideDataFound) {
-            sb.innerText = `⚠️ ${station.name} (${station.code}) のデータがありません (tidesフォルダにCSVを追加してください)`;
-            sb.style.color = "#ff8888";
-        } else {
-            sb.innerText = `✅ ${station.name} のデータを読み込みました`;
-            sb.style.color = "#38bdf8";
-        }
+        let msg = "";
+        if (!tideDataFound && !rainDataFound) msg = `⚠️ 潮汐 (${station.name}) と 雨 (${currentLocationName}) のCSVが見つかりません`;
+        else if (!tideDataFound) msg = `⚠️ 潮汐 (${station.name}) のCSVが見つかりません (tidesフォルダを確認)`;
+        else if (!rainDataFound) msg = `⚠️ 雨 (${currentLocationName}) のCSVが見つかりません (rainフォルダを確認)`;
+        else msg = `✅ ${station.name}の潮汐 ＋ ${currentLocationName}の雨 を描画しました`;
+        
+        sb.innerText = msg;
+        sb.style.color = (tideDataFound && rainDataFound) ? "#38bdf8" : "#ff8888";
     }
 }
+
 
 async function loadAllData() {
     const fetchCSV = async (url) => {
@@ -261,7 +280,6 @@ function updateCalendarCycle() {
 
     computeMonthDays(startDate);
 
-    // ★ ここが一番の変更点：通信を待たずに、先に「図形と暦」を描いてしまう！
     drawLunarShadow(cycleStartTimeMs);
     drawAstronomicalPins(cycleStartTimeMs);
     drawDynamicLines();
@@ -285,7 +303,6 @@ function updateCalendarCycle() {
         });
     }
 
-    // 図形を描き終わったあとに、裏側でAPIとCSVを取りに行き、取れたら波と雨を描く（遅延描画）
     fetchMeteoAndTideData(cycleStartTimeMs).then(() => {
         if(typeof drawTideGraph === 'function') drawTideGraph(cycleStartTimeMs); 
         if(typeof drawRainfallGraph === 'function') drawRainfallGraph(cycleStartTimeMs);
@@ -345,7 +362,6 @@ async function initApp() {
             masterGroup.appendChild(g);
         });
         
-        // ★ initApp内での updateCalendarCycle は await せずに呼ぶように変更
         updateCalendarCycle();
         initInteractions();
         
