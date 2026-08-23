@@ -1,4 +1,4 @@
-// draw.js (SVG描画モジュール) - 波形スムーズ化・cm完全対応版
+// draw.js (SVG描画モジュール) - 動的API対応版
 
 if (typeof window.mansions === 'undefined') {
     window.mansions = [
@@ -11,10 +11,8 @@ if (typeof window.mansions === 'undefined') {
 
 if (typeof window.getTideRadius === 'undefined') {
     window.getTideRadius = function(tide, rMin, rMax) {
-        // 日本の潮位(cm)に合わせたスケール: -50cm 〜 300cm
-        const minTide = -50;
-        const maxTide = 300;
-        // リニア（線形）マッピング
+        const minTide = -1.5;
+        const maxTide = 7.5;
         let ratio = (tide - minTide) / (maxTide - minTide);
         return rMin + ratio * (rMax - rMin);
     };
@@ -253,6 +251,7 @@ function drawDailyRainStats(startDate) {
     for (let i = 0; i < window.currentMonthDays; i++) {
         const loopDate = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
         const dateStr = formatDateStr(loopDate);
+        // APIから取得した localRainData をそのまま使用
         if (localRainData[dateStr] !== undefined && localRainData[dateStr] > 0) {
             const rain = localRainData[dateStr];
             const startAngle = (currentStartSegment + i * 4) * 3;
@@ -283,7 +282,7 @@ function drawDailyRainStats(startDate) {
     }
 }
 
-// ▼▼ スムーズ化＆cm対応の潮汐グラフ描画 ▼▼
+// ▼▼ 変更箇所：APIから取得した毎時データを使って滑らかな潮汐グラフを描く ▼▼
 function drawTideGraph(cycleStartTimeMs) {
     const waveLayer = document.getElementById("layer-tide-wave");
     const guideLayer = document.getElementById("layer-guide-tide");
@@ -291,64 +290,44 @@ function drawTideGraph(cycleStartTimeMs) {
     if(guideLayer) guideLayer.innerHTML = "";
     if (concentricRings.length < 23) return;
 
-    if (!highLowTidePoints || highLowTidePoints.length === 0) return;
-
     const stGraph = window.layerSettings.tideGraph;
     const stLine = window.layerSettings.guideTideLine || window.layerSettings.guideTide;
     const stText = window.layerSettings.guideTideText || window.layerSettings.guideTide;
 
     const rMin = concentricRings[16];
     const rMax = concentricRings[22];
+    const totalHours = window.currentMonthDays * 24;
 
+    let pathD = "";
     const startAngle = currentStartSegment * 3;
-    let points = [];
     
-    // カレンダーの表示期間の座標ポイントを計算して配列に格納
-    highLowTidePoints.forEach((pt) => {
-        const diffMs = pt.time - cycleStartTimeMs;
-        const hours = diffMs / 3600000;
-        
-        if (hours >= 0 && hours <= window.currentMonthDays * 24) {
-            const r = window.getTideRadius(pt.tide, rMin, rMax); 
-            const angle = startAngle + hours * 0.5;
-            points.push(polarToCartesian(cx, cy, r, angle));
+    for (let h = 0; h < totalHours; h++) {
+        const tideFt = apiTideData[h];
+        if (tideFt === null || tideFt === undefined) continue;
+
+        const r = window.getTideRadius(tideFt, rMin, rMax); 
+        const angle = startAngle + h * 0.5;
+        const coords = polarToCartesian(cx, cy, r, angle);
+
+        if (pathD === "") {
+            pathD += `M ${coords.x},${coords.y} `;
+        } else {
+            pathD += `L ${coords.x},${coords.y} `;
         }
-    });
+    }
     
-    // 中点補間によるスムーズ曲線（ベジェ曲線）のパス生成
-    if (points.length > 0) {
-        let pathD = `M ${points[0].x},${points[0].y} `;
-        
-        for (let i = 0; i < points.length - 1; i++) {
-            const p1 = points[i];
-            const p2 = points[i + 1];
-            // 2点間の中間ポイントを計算
-            const midX = (p1.x + p2.x) / 2;
-            const midY = (p1.y + p2.y) / 2;
-            
-            // Q (二次ベジェ) コマンドで滑らかに結ぶ
-            pathD += `Q ${p1.x},${p1.y} ${midX},${midY} `;
-            // 最後だけはそのまま結ぶ
-            if (i === points.length - 2) {
-                pathD += `L ${p2.x},${p2.y} `;
-            }
-        }
-        if(waveLayer) waveLayer.appendChild(createSVGElem("path", { d: pathD, fill: "none", stroke: stGraph.stroke, "stroke-width": stGraph.strokeWidth, opacity: stGraph.opacity, "stroke-linecap": "round", "stroke-linejoin": "round" }));
+    if (pathD !== "") {
+        if(waveLayer) waveLayer.appendChild(createSVGElem("path", { d: pathD, fill: "none", stroke: stGraph.stroke, "stroke-width": stGraph.strokeWidth, opacity: stGraph.opacity, "stroke-linejoin": "round" }));
     }
 
-    // 目盛り線の描画（日本に合わせた -50, 0, 50, 100, 150, 200, 250, 300 cm）
-    [-50, 0, 50, 100, 150, 200, 250, 300].forEach(cm => {
-        const r = window.getTideRadius(cm, rMin, rMax); 
-        
-        // 描画範囲(rMin 〜 rMax)をはみ出る目盛り線は描かない
-        if (r < rMin - 5 || r > rMax + 5) return; 
-
+    [-1.5, 0, 1.5, 3.0, 4.5, 6.0, 7.5].forEach(ft => {
+        const r = window.getTideRadius(ft, rMin, rMax); 
         if(guideLayer) guideLayer.appendChild(createSVGElem("circle", { class: "layer-guide-tide-line", cx: cx, cy: cy, r: r, fill: "none", stroke: stLine.stroke, "stroke-width": stLine.strokeWidth, "stroke-dasharray": "4,4", opacity: stLine.opacity }));
 
         for(let i = 0; i < 6; i++) {
             const labelAngle = currentStartSegment * 3 + (i * 60);
             const labelPt = polarToCartesian(cx, cy, r + stText.offsetRadius, labelAngle);
-            if(guideLayer) guideLayer.appendChild(createStyledText(stText, { class: "layer-guide-tide-text", x: labelPt.x, y: labelPt.y, "text-anchor": "middle", "dominant-baseline": "central", transform: `rotate(${labelAngle}, ${labelPt.x}, ${labelPt.y})` }, cm + "cm"));
+            if(guideLayer) guideLayer.appendChild(createStyledText(stText, { class: "layer-guide-tide-text", x: labelPt.x, y: labelPt.y, "text-anchor": "middle", "dominant-baseline": "central", transform: `rotate(${labelAngle}, ${labelPt.x}, ${labelPt.y})` }, ft + "ft"));
         }
     });
 }
