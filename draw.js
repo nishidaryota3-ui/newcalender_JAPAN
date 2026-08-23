@@ -270,7 +270,9 @@ function drawDailyRainStats(startDate) {
             const ptText = polarToCartesian(cx, cy, layer23CenterR + stText.offsetRadius, angleMid);
             
             const textGroup = createSVGElem("g", { transform: `rotate(${angleMid + 180}, ${ptText.x}, ${ptText.y})` });
-            const iconGroup = createSVGElem("g", { transform: `translate(${ptText.x - 14}, ${ptText.y - 4})`, fill: stText.fill });
+            
+            // 修正③：文字色（stText.fill）をSVG内部のcurrentColorに適用させるためにstyleを追加
+            const iconGroup = createSVGElem("g", { transform: `translate(${ptText.x - 14}, ${ptText.y - 4})`, fill: stText.fill, style: `color: ${stText.fill};` });
             iconGroup.innerHTML = iconDrop;
             textGroup.appendChild(iconGroup);
 
