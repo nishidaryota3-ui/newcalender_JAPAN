@@ -1,4 +1,4 @@
-// main.js (司令塔・初期化モジュール) - API完全連携（CSV撤廃）版
+// main.js (司令塔・初期化モジュール) - 天気＆潮汐 分離API版
 
 window.defaultLayerSettings = {
     canvasBg: { fill: "#f5f3eb" },
@@ -110,13 +110,11 @@ let koyomiDatabase = {};
 const KOYOMI_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRqoX31YV0YAO3Mq4WatmLhjP7uUSF6dPMy3D2H3ktEFDFg1X1gJmoIXkul9JpS4aLgK9Ze3SSbV9BZ/pub?gid=0&single=true&output=csv';
 const HAIKU_CSV_URL = 'https://docs.google.com/spreadsheets/d/1m0y8AOJNx1Ad4I44poPheQAQNki1-QQIwi9wSw8jaBg/export?format=csv&gid=126185184';
 
-// ▼▼ 変更箇所：天気と海洋の2つのAPIを同時にフェッチする統合関数 ▼▼
+// ▼▼ 変更箇所：天気APIは「検索した場所」、海洋APIは「プルダウンで選んだ海」からデータを取得 ▼▼
 async function fetchMeteoData(startDateMs) {
-    if (typeof loader !== 'undefined') loader.style.display = 'flex';
     const dStart = new Date(startDateMs);
     const dEnd = new Date(startDateMs + 30 * 86400000);
     
-    // 古いデータをリセット
     apiRainData = new Array(720).fill(null);
     apiTideData = new Array(720).fill(null);
     localRainData = {}; 
@@ -127,10 +125,12 @@ async function fetchMeteoData(startDateMs) {
     const isHistorical = dEnd.getTime() < Date.now() - (5 * 86400000);
     const weatherBaseUrl = isHistorical ? 'https://archive-api.open-meteo.com/v1/archive' : 'https://api.open-meteo.com/v1/forecast';
     
-    // 天気API（1時間ごとの降水量と、1日ごとの合計降水量）
+    // 天気は「検索ボックス」の currentLat/Lon を使用
     const rainApiUrl = `${weatherBaseUrl}?latitude=${currentLat}&longitude=${currentLon}&hourly=precipitation&daily=precipitation_sum&start_date=${sDate}&end_date=${eDate}&timezone=Asia%2FTokyo`;
-    // 海洋API（1時間ごとの潮位）
-    const marineApiUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${currentLat}&longitude=${currentLon}&hourly=ocean_height&start_date=${sDate}&end_date=${eDate}&timezone=Asia%2FTokyo`;
+    
+    // 潮汐は「プルダウン」で選ばれた TIDE_STATIONS の座標を使用
+    const tideStation = TIDE_STATIONS[currentTideStationIndex];
+    const marineApiUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${tideStation.lat}&longitude=${tideStation.lon}&hourly=ocean_height&start_date=${sDate}&end_date=${eDate}&timezone=Asia%2FTokyo`;
 
     try {
         const [rainRes, marineRes] = await Promise.all([fetch(rainApiUrl), fetch(marineApiUrl)]);
@@ -152,13 +152,11 @@ async function fetchMeteoData(startDateMs) {
             if(mJson.hourly && mJson.hourly.ocean_height) {
                 for(let i=0; i<720; i++) {
                     let val = mJson.hourly.ocean_height[i];
-                    // APIはメートルで返してくるので、既存のUI設定（ft）に合わせるため変換 (1m = 3.28084ft)
                     apiTideData[i] = (val !== null && val !== undefined) ? val * 3.28084 : null;
                 }
             }
         }
     } catch(e) { console.error("Open-Meteo API Error:", e); }
-    if (typeof loader !== 'undefined') loader.style.display = 'none';
 }
 
 async function loadAllData() {
@@ -169,7 +167,6 @@ async function loadAllData() {
         } catch(e) { return null; }
     };
 
-    // ▼▼ 変更箇所：雨と潮汐のCSV読み込みを完全に撤廃 ▼▼
     const [koyomiTxt, haikuTxt] = await Promise.all([
         fetchCSV(KOYOMI_CSV_URL), fetchCSV(HAIKU_CSV_URL)
     ]);
@@ -221,14 +218,14 @@ async function updateCalendarCycle() {
 
     computeMonthDays(startDate);
     
-    // ▼▼ 変更箇所：描画する「前」に、APIからすべての気象・海洋データを取得しておく ▼▼
+    // APIから雨と潮の両方のデータを取得
     await fetchMeteoData(cycleStartTimeMs);
 
     drawLunarShadow(cycleStartTimeMs);
     drawAstronomicalPins(cycleStartTimeMs);
     drawDynamicLines();
-    drawTideGraph(cycleStartTimeMs); // APIのデータを使って描画されます
-    drawDailyRainStats(startDate);   // APIのデータを使って描画されます
+    drawTideGraph(cycleStartTimeMs); 
+    drawDailyRainStats(startDate);   
     drawLunarMansions(cycleStartTimeMs);
     renderSavedData();
     drawTimeLabels();
