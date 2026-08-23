@@ -1,4 +1,4 @@
-// ui.js (UI構築・イベントモジュール) - ジオコーディング（位置検索）追加版
+// ui.js (UI構築・イベントモジュール) - 潮汐プルダウン対応版
 
 const TEXT_TARGETS = ['gregorian', 'weekday', 'sekki', 'kou', 'zassetsu', 'holiday', 'important', 'wafuText', 'gregorianText', 'dailyRainText', 'guideTime', 'guideTideText', 'guideRainText', 'lunarMansion', 'eventShinto', 'eventBuddhism', 'eventChurch', 'eventSonota', 'lunar', 'haikuText'];
 const SHAPE_TARGETS = ['baseSvg', 'lunarShadow', 'astroPins', 'dateLines', 'tideGraph', 'rainGraph', 'dailyRainBg', 'guideTideLine', 'guideRainLine', 'canvasBg'];
@@ -38,12 +38,25 @@ function initUI() {
     navDiv.id = 'nav-bar';
     navDiv.style = "position:fixed; top:30px; right:30px; background:rgba(25,30,40,0.85); padding:10px 15px; border-radius:8px; color:#d4af37; z-index:100; display:flex; gap:15px; align-items:center; border: 1px solid rgba(212,175,55,0.3); backdrop-filter: blur(10px);";
     
-    // ▼▼ 変更箇所：観測地検索ボックスの追加 ▼▼
+    // ▼▼ 変更箇所：天気検索と潮汐プルダウンを配置 ▼▼
+    let tideOptions = "";
+    TIDE_STATIONS.forEach((station, idx) => {
+        tideOptions += `<option value="${idx}" ${idx === currentTideStationIndex ? "selected" : ""}>${station.name}</option>`;
+    });
+
     navDiv.innerHTML = `
-        <div style="display:flex; align-items:center; gap:8px; border-right:1px solid rgba(212,175,55,0.3); padding-right:15px;">
-            <span style="font-size:12px; color:#8b949e;">観測地:</span>
-            <input type="text" id="locationInput" placeholder="地名を入力 (例: 鎌倉)" value="${currentLocationName}" style="width:110px; padding:4px; border-radius:4px; border:1px solid #555; background:#222; color:#fff; font-size:12px;">
-            <button id="searchLocationBtn" style="background:#0ea5e9; border:none; color:#fff; padding:4px 8px; cursor:pointer; border-radius:4px; font-weight:bold; font-size:12px;">検索</button>
+        <div style="display:flex; align-items:center; gap:15px; border-right:1px solid rgba(212,175,55,0.3); padding-right:15px;">
+            <div style="display:flex; align-items:center; gap:5px;">
+                <span style="font-size:12px; color:#8b949e;">天気:</span>
+                <input type="text" id="locationInput" placeholder="地名を入力 (例: 長野)" value="${currentLocationName}" style="width:90px; padding:4px; border-radius:4px; border:1px solid #555; background:#222; color:#fff; font-size:12px;">
+                <button id="searchLocationBtn" style="background:#0ea5e9; border:none; color:#fff; padding:4px 8px; cursor:pointer; border-radius:4px; font-weight:bold; font-size:12px;">検索</button>
+            </div>
+            <div style="display:flex; align-items:center; gap:5px;">
+                <span style="font-size:12px; color:#8b949e;">🌊 潮:</span>
+                <select id="tideSelect" style="padding:4px; border-radius:4px; border:1px solid #555; background:#222; color:#fff; font-size:12px;">
+                    ${tideOptions}
+                </select>
+            </div>
         </div>
         <button id="prevBtn" style="background:transparent; border:1px solid #d4af37; color:#d4af37; padding:4px 8px; cursor:pointer; border-radius:4px;">◀</button>
         <div id="cycleDisplay" title="クリックして年月を移動" style="font-weight:bold; font-size:14px; text-align:center; min-width:120px; cursor:pointer; padding:4px; border-radius:4px; transition:background 0.2s;">--</div>
@@ -651,18 +664,17 @@ function initUI() {
         if (document.getElementById('design-panel').style.display === 'block') loadPanelData();
     };
 
-    // ▼▼ 変更箇所：ジオコーディングAPI（地名から緯度経度を取得）のイベント追加 ▼▼
+    // ▼▼ 変更箇所：天気検索と潮汐プルダウンのイベント処理 ▼▼
     document.getElementById('searchLocationBtn').onclick = async () => {
         const query = document.getElementById('locationInput').value.trim();
         if(!query) return;
         
         if (typeof loader !== 'undefined') {
-            loader.innerHTML = `☁️ 「${query}」の座標を検索中...`;
+            loader.innerHTML = `☁️ 「${query}」の天気を検索中...`;
             loader.style.display = 'flex';
         }
 
         try {
-            // Open-Meteoの無料・無登録ジオコーディングAPIを使用
             const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=ja&format=json`);
             const data = await res.json();
             
@@ -673,10 +685,7 @@ function initUI() {
                 currentLocationName = loc.name;
                 document.getElementById('locationInput').value = loc.name;
                 
-                // 座標が更新されたので、カレンダーの気象データを再取得して描画
-                if(typeof updateCalendarCycle === 'function') {
-                    await updateCalendarCycle();
-                }
+                if(typeof updateCalendarCycle === 'function') await updateCalendarCycle();
             } else {
                 alert(`「${query}」が見つかりませんでした。別の地名でお試しください。`);
             }
@@ -685,9 +694,19 @@ function initUI() {
             alert('位置情報の検索に失敗しました。');
         }
         
-        if (typeof loader !== 'undefined') {
-            loader.innerHTML = "☁️ 観測データを統合中...";
-            loader.style.display = 'none';
+        if (typeof loader !== 'undefined') loader.style.display = 'none';
+    };
+
+    // 潮汐のプルダウンが変更された時の処理
+    document.getElementById('tideSelect').onchange = async (e) => {
+        currentTideStationIndex = parseInt(e.target.value);
+        if(typeof updateCalendarCycle === 'function') {
+            if (typeof loader !== 'undefined') {
+                loader.innerHTML = `🌊 潮汐データを再取得中...`;
+                loader.style.display = 'flex';
+            }
+            await updateCalendarCycle();
+            if (typeof loader !== 'undefined') loader.style.display = 'none';
         }
     };
     // ▲▲ 追加ここまで ▲▲
@@ -843,7 +862,7 @@ function initUI() {
     let isSpacePressed = false;
 
     document.addEventListener('keydown', (e) => {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
         if (e.code === 'Space') {
             e.preventDefault();
             if (!isSpacePressed) {
