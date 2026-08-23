@@ -1,4 +1,4 @@
-// globals.js (全体のデータと状態の管理) - 潮汐プルダウン対応版
+// globals.js (全体のデータと状態の管理) - ハイブリッド（API＋ローカルCSV）版
 
 const container = document.getElementById('container');
 const statusBar = document.getElementById('status-bar');
@@ -22,25 +22,27 @@ let globalRotation = 0;
 let calendarData = JSON.parse(localStorage.getItem('polarCalendarDataV27')) || {};
 let concentricRings = []; 
 
-// ▼▼ 天気（降水量）用の座標 ▼▼
+// ▼ 天気（降水量）用の座標（現在地） ▼
 let currentLat = 35.6895; 
 let currentLon = 139.6917;
 let currentLocationName = "東京都"; 
 
-// ▼▼ 新規：潮汐観測所のリストと選択中の座標 ▼▼
+// ▼ 潮汐（CSV）用の観測所リスト ▼
+// ※必要に応じて、ここを増やすだけでプルダウンの選択肢が増えます
 const TIDE_STATIONS = [
-    { name: "太平洋: 江の島 (神奈川)", lat: 35.2997, lon: 139.4808 },
-    { name: "太平洋: 銚子 (千葉)", lat: 35.7333, lon: 140.8333 },
-    { name: "太平洋: 室戸岬 (高知)", lat: 33.2500, lon: 134.1833 },
-    { name: "日本海: 舞鶴 (京都)", lat: 35.4833, lon: 135.3333 },
-    { name: "日本海: 輪島 (石川)", lat: 37.4000, lon: 136.9000 },
-    { name: "日本海: 小樽 (北海道)", lat: 43.2000, lon: 141.0167 },
-    { name: "瀬戸内海: 高松 (香川)", lat: 34.3500, lon: 134.0500 },
-    { name: "瀬戸内海: 広島 (広島)", lat: 34.3500, lon: 132.4667 },
-    { name: "東シナ海: 那覇 (沖縄)", lat: 26.2167, lon: 127.6667 },
-    { name: "東シナ海: 石垣 (沖縄)", lat: 24.3333, lon: 124.1667 }
+    { code: "EN", name: "江の島 / 湘南 (太平洋)" },
+    { code: "TK", name: "東京 (東京湾)" },
+    { code: "CH", name: "銚子 (太平洋)" },
+    { code: "OM", name: "御前崎 (太平洋)" },
+    { code: "MZ", name: "舞鶴 (日本海)" },
+    { code: "WJ", name: "輪島 (日本海)" },
+    { code: "OT", name: "小樽 (日本海/北海道)" },
+    { code: "TM", name: "高松 (瀬戸内海)" },
+    { code: "HR", name: "広島 (瀬戸内海)" },
+    { code: "NA", name: "那覇 (東シナ海)" },
+    { code: "IG", name: "石垣 (東シナ海)" }
 ];
-let currentTideStationIndex = 0; // 初期値は江の島
+let currentTideStationIndex = 0; // 初期値（江の島）
 
 const baseDate = new Date(2026, 7, 13);
 const synodicMonth = 29.530589;
@@ -49,7 +51,8 @@ let currentStartSegment = 0;
 
 let localRainData = {};
 let apiRainData = [];
-let apiTideData = []; 
+// ▼ パラオ版の配列名（highLowTidePoints）を復活させ、CSVから読み込むデータを入れる ▼
+let highLowTidePoints = []; 
 
 const iconPan = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>`;
 const iconRotate = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`;
