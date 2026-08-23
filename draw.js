@@ -1,3 +1,5 @@
+// draw.js (SVG描画モジュール) - 動的API対応版
+
 if (typeof window.mansions === 'undefined') {
     window.mansions = [
         { name: "角" }, { name: "亢" }, { name: "氐" }, { name: "房" }, { name: "心" }, { name: "尾" }, { name: "箕" },
@@ -249,6 +251,7 @@ function drawDailyRainStats(startDate) {
     for (let i = 0; i < window.currentMonthDays; i++) {
         const loopDate = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
         const dateStr = formatDateStr(loopDate);
+        // APIから取得した localRainData をそのまま使用
         if (localRainData[dateStr] !== undefined && localRainData[dateStr] > 0) {
             const rain = localRainData[dateStr];
             const startAngle = (currentStartSegment + i * 4) * 3;
@@ -279,6 +282,7 @@ function drawDailyRainStats(startDate) {
     }
 }
 
+// ▼▼ 変更箇所：APIから取得した毎時データを使って滑らかな潮汐グラフを描く ▼▼
 function drawTideGraph(cycleStartTimeMs) {
     const waveLayer = document.getElementById("layer-tide-wave");
     const guideLayer = document.getElementById("layer-guide-tide");
@@ -292,37 +296,28 @@ function drawTideGraph(cycleStartTimeMs) {
 
     const rMin = concentricRings[16];
     const rMax = concentricRings[22];
-    const cycleEndMs = cycleStartTimeMs + window.currentMonthDays * 24 * 60 * 60 * 1000; 
+    const totalHours = window.currentMonthDays * 24;
+
+    let pathD = "";
+    const startAngle = currentStartSegment * 3;
     
-    const cyclePoints = highLowTidePoints.filter(p => p.time >= cycleStartTimeMs && p.time <= cycleEndMs);
+    for (let h = 0; h < totalHours; h++) {
+        const tideFt = apiTideData[h];
+        if (tideFt === null || tideFt === undefined) continue;
 
-    if (cyclePoints.length > 1) {
-        let pathD = "";
-        for (let i = 0; i < cyclePoints.length; i++) {
-            const pt = cyclePoints[i];
-            const diffHours = (pt.time - cycleStartTimeMs) / 3600000;
-            const segmentIndex = (currentStartSegment + diffHours * (4/24)) % 120;
-            let angle = segmentIndex * 3;
-            const r = window.getTideRadius(pt.tide, rMin, rMax); 
-            const coords = polarToCartesian(cx, cy, r, angle);
+        const r = window.getTideRadius(tideFt, rMin, rMax); 
+        const angle = startAngle + h * 0.5;
+        const coords = polarToCartesian(cx, cy, r, angle);
 
-            if(i === 0) {
-                pathD += `M ${coords.x},${coords.y} `;
-            } else {
-                const prev = cyclePoints[i-1];
-                const diffHPrev = (prev.time - cycleStartTimeMs) / 3600000;
-                let anglePrev = ((currentStartSegment + diffHPrev * (4/24)) % 120) * 3;
-                if(angle < anglePrev) angle += 360; 
-
-                const cp1Angle = anglePrev + (angle - anglePrev) * 0.4;
-                const cp2Angle = anglePrev + (angle - anglePrev) * 0.6;
-                const rPrev = window.getTideRadius(prev.tide, rMin, rMax); 
-                const cp1 = polarToCartesian(cx, cy, rPrev, cp1Angle);
-                const cp2 = polarToCartesian(cx, cy, r, cp2Angle);
-                pathD += `C ${cp1.x},${cp1.y} ${cp2.x},${cp2.y} ${coords.x},${coords.y} `;
-            }
+        if (pathD === "") {
+            pathD += `M ${coords.x},${coords.y} `;
+        } else {
+            pathD += `L ${coords.x},${coords.y} `;
         }
-        if(waveLayer) waveLayer.appendChild(createSVGElem("path", { d: pathD, fill: "none", stroke: stGraph.stroke, "stroke-width": stGraph.strokeWidth, opacity: stGraph.opacity }));
+    }
+    
+    if (pathD !== "") {
+        if(waveLayer) waveLayer.appendChild(createSVGElem("path", { d: pathD, fill: "none", stroke: stGraph.stroke, "stroke-width": stGraph.strokeWidth, opacity: stGraph.opacity, "stroke-linejoin": "round" }));
     }
 
     [-1.5, 0, 1.5, 3.0, 4.5, 6.0, 7.5].forEach(ft => {
