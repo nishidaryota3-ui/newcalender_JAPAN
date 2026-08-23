@@ -1,4 +1,4 @@
-// ui.js (UI構築・イベントモジュール) - パネルバグ完全修復版
+// ui.js (UI構築・イベントモジュール) - パネルバグ完全修復＆雨CSV対応版
 
 const TEXT_TARGETS = ['gregorian', 'weekday', 'sekki', 'kou', 'zassetsu', 'holiday', 'important', 'wafuText', 'gregorianText', 'dailyRainText', 'guideTime', 'guideTideText', 'guideRainText', 'lunarMansion', 'eventShinto', 'eventBuddhism', 'eventChurch', 'eventSonota', 'lunar', 'haikuText'];
 const SHAPE_TARGETS = ['baseSvg', 'lunarShadow', 'astroPins', 'dateLines', 'tideGraph', 'rainGraph', 'dailyRainBg', 'guideTideLine', 'guideRainLine', 'canvasBg'];
@@ -67,12 +67,12 @@ function initUI() {
     navDiv.innerHTML = `
         <div style="display:flex; align-items:center; gap:15px; border-right:1px solid rgba(212,175,55,0.3); padding-right:15px;">
             <div style="display:flex; align-items:center; gap:5px;">
-                <span style="font-size:12px; color:#8b949e;">天気:</span>
+                <span style="font-size:12px; color:#8b949e;">☔ 雨(CSV):</span>
                 <input type="text" id="locationInput" placeholder="地名を入力" value="${currentLocationName}" style="width:90px; padding:4px; border-radius:4px; border:1px solid #555; background:#222; color:#fff; font-size:12px;">
-                <button id="searchLocationBtn" style="background:#0ea5e9; border:none; color:#fff; padding:4px 8px; cursor:pointer; border-radius:4px; font-weight:bold; font-size:12px;">検索</button>
+                <button id="searchLocationBtn" style="background:#0ea5e9; border:none; color:#fff; padding:4px 8px; cursor:pointer; border-radius:4px; font-weight:bold; font-size:12px;">読込</button>
             </div>
             <div style="display:flex; align-items:center; gap:5px;">
-                <span style="font-size:12px; color:#8b949e;">🌊 潮:</span>
+                <span style="font-size:12px; color:#8b949e;">🌊 潮(CSV):</span>
                 <select id="tideSelect" style="padding:4px; border-radius:4px; border:1px solid #555; background:#222; color:#fff; font-size:12px; max-width: 140px;">
                     ${tideOptions}
                 </select>
@@ -376,7 +376,6 @@ function initUI() {
 
     let currentDesignTarget = null;
     
-    // ★ ここが諸悪の根源だった部分です。データを正しく読み込むように修復しました。
     const loadPanelData = () => {
         const st = window.layerSettings[currentDesignTarget];
         if (!st) return;
@@ -678,35 +677,17 @@ function initUI() {
         if (document.getElementById('design-panel').style.display === 'block') loadPanelData();
     };
 
-    document.getElementById('searchLocationBtn').onclick = async () => {
+    // ★ APIを使った検索機能を廃止し、CSVの地名を更新するだけの機能に変更 ★
+    document.getElementById('searchLocationBtn').onclick = () => {
         const query = document.getElementById('locationInput').value.trim();
         if(!query) return;
-        
-        try {
-            const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=ja&format=json`);
-            const data = await res.json();
-            
-            if (data.results && data.results.length > 0) {
-                const loc = data.results[0];
-                currentLat = loc.latitude;
-                currentLon = loc.longitude;
-                currentLocationName = loc.name;
-                document.getElementById('locationInput').value = loc.name;
-                
-                if(typeof updateCalendarCycle === 'function') await updateCalendarCycle();
-            } else {
-                alert(`「${query}」が見つかりませんでした。別の地名でお試しください。`);
-            }
-        } catch(e) {
-            alert('位置情報の検索に失敗しました。');
-        }
+        currentLocationName = query; // rainフォルダのCSV名に反映される
+        if(typeof updateCalendarCycle === 'function') updateCalendarCycle();
     };
 
-    document.getElementById('tideSelect').onchange = async (e) => {
+    document.getElementById('tideSelect').onchange = (e) => {
         currentTideStationIndex = parseInt(e.target.value);
-        if(typeof updateCalendarCycle === 'function') {
-            await updateCalendarCycle();
-        }
+        if(typeof updateCalendarCycle === 'function') updateCalendarCycle();
     };
 
     const printViewBox = "-304.31 -33.52 2450 2450"; 
