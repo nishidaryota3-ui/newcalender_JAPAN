@@ -1,4 +1,4 @@
-// globals.js (全体のデータと状態の管理) - 日本版（動的座標）初期化
+// globals.js (全体のデータと状態の管理) - API完全移行版
 
 const container = document.getElementById('container');
 const statusBar = document.getElementById('status-bar');
@@ -22,7 +22,6 @@ let globalRotation = 0;
 let calendarData = JSON.parse(localStorage.getItem('polarCalendarDataV27')) || {};
 let concentricRings = []; 
 
-// ▼▼ 変更箇所：パラオ固定を廃止し、動的な座標変数に変更（初期値は東京） ▼▼
 let currentLat = 35.6895; 
 let currentLon = 139.6917;
 let currentLocationName = "東京都"; 
@@ -32,9 +31,10 @@ const synodicMonth = 29.530589;
 let currentCycle = 0; 
 let currentStartSegment = 0; 
 
+// ▼▼ 変更箇所：CSV用の古い配列を消し、API用の新しい配列を用意 ▼▼
 let localRainData = {};
-let highLowTidePoints = []; 
 let apiRainData = [];
+let apiTideData = []; // 毎時の潮位データを格納
 
 const iconPan = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>`;
 const iconRotate = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>`;
