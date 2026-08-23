@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>潮汐計算ロジック 検証ツール</title>
+<style>
+    body { background: #111; color: #fff; font-family: sans-serif; padding: 20px; }
+    h1 { color: #d4af37; font-size: 18px; }
+    .panel { background: #222; border: 1px solid #555; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    canvas { background: #000; border: 1px solid #444; width: 100%; max-width: 800px; height: 300px; margin-top: 10px; }
+    .desc { font-size: 12px; color: #aaa; margin-bottom: 10px; }
+    input, select, button { background: #333; color: #fff; border: 1px solid #555; padding: 5px; border-radius: 4px; }
+    button { background: #0ea5e9; cursor: pointer; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<h1>潮汐（調和定数）計算テスト</h1>
+<div class="desc">
+    ※内部の数学ロジックのみで「東京」の波形を計算し、描画します。外部APIは一切使用していません。<br>
+    ※気象庁の「潮位表」サイト（東京、該当の日付）と見比べて、波の山と谷のタイミングが合っているか確認してください。
+</div>
+
+<div class="panel">
+    <label>検証する日付: <input type="date" id="testDate" value="2026-08-23"></label>
+    <label style="margin-left: 10px;">観測所: 
+        <select id="station">
+            <option value="tokyo">東京 (太平洋側)</option>
+        </select>
+    </label>
+    <button id="drawBtn" style="margin-left: 10px;">計算・描画</button>
+    <canvas id="tideCanvas" width="800" height="300"></canvas>
+</div>
+
+<script>
+// ==========================================
+// 【検証用】潮位推算アルゴリズム（主要4分潮）
+// ==========================================
+
+// 気象庁のデータに基づく主要4分潮の調和定数
+// H: 振幅(cm), kappa: 遅角(度)
+const STATIONS = {
+    tokyo: {
+        name: "東京", Z0: 100, // Z0は平均海面(cm)
+        constants: [
+            { name: "M2", speed: 28.984104, H: 64.9, kappa: 161.4 }, // 主太陰半日周潮
+            { name: "S2", speed: 30.000000, H: 29.8, kappa: 198.8 }, // 主太陽半日周潮
+            { name: "K1", speed: 15.041069, H: 24.3, kappa: 177.3 }, // 日月合成日周潮
+            { name: "O1", speed: 13.943036, H: 21.0, kappa: 151.7 }  // 主太陰日周潮
+        ]
+    }
+};
+
+// 基準となる天文引数（V0）の近似計算関数
+// 指定された日時（JST）の0時0分時点における各天体の角度を近似計算する
+function getAstronomicalArguments(date) {
+    const y = date.getFullYear();
+    const m = date.getMonth() + 1;
+    const d = date.getDate();
+
+    // 2000年1月1日正午(UT)からの経過日数 (ユリウス世紀数 T) を計算
+    const jd = 367 * y - Math.floor(7 * (y + Math.floor((m + 9) / 12)) / 4) + Math.floor(275 * m / 9) + d + 1721013.5;
+    const T = (jd - 2451545.0) / 36525.0;
+
+    // 平均黄経の近似計算（度）
+    const h = (280.4665 + 36000.7698 * T) % 360; // 太陽の平均黄経
+    const s = (218.3165 + 481267.8813 * T) % 360; // 月の平均黄経
+    const p = (83.3532 + 4069.0137 * T) % 360; // 月の近地点黄経
+
+    // 各分潮の初期位相角 (V0) の計算
+    // ※これは極めて簡易的な近似式であり、厳密な推算には節点補正(f, u)などが必要ですが、波形の傾向確認用です。
+    return {
+        M2: (2 * h - 2 * s) % 360,
+        S2: 0,
+        K1: (h + 90) % 360,
+        O1: (h - 2 * s + 90) % 360
+    };
+}
+
+// 指定した日時（JST）から24時間分の潮位配列（cm）を計算する
+function calculateTide24h(date, stationKey) {
+    const st = STATIONS[stationKey];
+    const V0 = getAstronomicalArguments(date);
+    const hourlyTides = [];
+
+    for (let hour = 0; hour < 24; hour++) {
+        let tideLevel = st.Z0; // 平均海面をベースにする
+        
+        // 4つの波（分潮）のサインカーブを合成する
+        st.constants.forEach(c => {
+            // (スピード * 時間 + 初期位相 - 遅角) をラジアンに変換
+            const angleDeg = (c.speed * hour + V0[c.name] - c.kappa);
+            const angleRad = angleDeg * (Math.PI / 180);
+            tideLevel += c.H * Math.cos(angleRad); 
+        });
+        
+        hourlyTides.push(tideLevel);
+    }
+    return hourlyTides;
+}
+
+// ==========================================
+// 描画処理
+// ==========================================
+function drawGraph() {
+    const canvas = document.getElementById('tideCanvas');
+    const ctx = canvas.getContext('2d');
+    const dateStr = document.getElementById('testDate').value;
+    const stationKey = document.getElementById('station').value;
+    
+    if (!dateStr) return;
+    const date = new Date(dateStr + "T00:00:00+09:00");
+    
+    // 計算実行！
+    const tideData = calculateTide24h(date, stationKey);
+
+    // キャンバスをクリア
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // 背景のグリッド線
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 24; i++) {
+        const x = (i / 23) * canvas.width;
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+        if (i % 3 === 0) {
+            ctx.fillStyle = '#888';
+            ctx.fillText(i + ":00", x + 5, canvas.height - 10);
+        }
+    }
+
+    // 波形の描画
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    
+    // 表示上の最大最小値（cm）
+    const maxTide = 250; 
+    const minTide = -50; 
+
+    tideData.forEach((tide, hour) => {
+        const x = (hour / 23) * canvas.width;
+        // Y軸は上が0なので反転させる
+        const y = canvas.height - ((tide - minTide) / (maxTide - minTide)) * canvas.height;
+        
+        if (hour === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    console.log(`${dateStr} ${STATIONS[stationKey].name} の計算結果(cm):`, tideData);
+}
+
+document.getElementById('drawBtn').onclick = drawGraph;
+// 初期描画
+drawGraph();
+
+</script>
+</body>
+</html>
