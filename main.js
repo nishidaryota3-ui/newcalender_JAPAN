@@ -1,4 +1,4 @@
-// main.js (司令塔・初期化モジュール) - 天気＆潮汐 分離API版
+// main.js (司令塔・初期化モジュール) - ハイブリッド（天気API＋潮汐CSV）版
 
 window.defaultLayerSettings = {
     canvasBg: { fill: "#f5f3eb" },
@@ -110,31 +110,27 @@ let koyomiDatabase = {};
 const KOYOMI_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRqoX31YV0YAO3Mq4WatmLhjP7uUSF6dPMy3D2H3ktEFDFg1X1gJmoIXkul9JpS4aLgK9Ze3SSbV9BZ/pub?gid=0&single=true&output=csv';
 const HAIKU_CSV_URL = 'https://docs.google.com/spreadsheets/d/1m0y8AOJNx1Ad4I44poPheQAQNki1-QQIwi9wSw8jaBg/export?format=csv&gid=126185184';
 
-// ▼▼ 変更箇所：天気APIは「検索した場所」、海洋APIは「プルダウンで選んだ海」からデータを取得 ▼▼
-async function fetchMeteoData(startDateMs) {
+// ▼ 天気APIと潮汐CSVの両方を取得する関数 ▼
+async function fetchMeteoAndTideData(startDateMs) {
     const dStart = new Date(startDateMs);
     const dEnd = new Date(startDateMs + 30 * 86400000);
     
+    // データリセット
     apiRainData = new Array(720).fill(null);
-    apiTideData = new Array(720).fill(null);
     localRainData = {}; 
+    highLowTidePoints = []; // CSV用の配列
     
     const sDate = formatDateStr(dStart);
     const eDate = formatDateStr(dEnd);
+    const targetYear = dStart.getFullYear(); // 表示中の西暦
 
+    // 1. 天気API（Open-Meteo）の取得
     const isHistorical = dEnd.getTime() < Date.now() - (5 * 86400000);
     const weatherBaseUrl = isHistorical ? 'https://archive-api.open-meteo.com/v1/archive' : 'https://api.open-meteo.com/v1/forecast';
-    
-    // 天気は「検索ボックス」の currentLat/Lon を使用
     const rainApiUrl = `${weatherBaseUrl}?latitude=${currentLat}&longitude=${currentLon}&hourly=precipitation&daily=precipitation_sum&start_date=${sDate}&end_date=${eDate}&timezone=Asia%2FTokyo`;
-    
-    // 潮汐は「プルダウン」で選ばれた TIDE_STATIONS の座標を使用
-    const tideStation = TIDE_STATIONS[currentTideStationIndex];
-    const marineApiUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${tideStation.lat}&longitude=${tideStation.lon}&hourly=ocean_height&start_date=${sDate}&end_date=${eDate}&timezone=Asia%2FTokyo`;
 
     try {
-        const [rainRes, marineRes] = await Promise.all([fetch(rainApiUrl), fetch(marineApiUrl)]);
-        
+        const rainRes = await fetch(rainApiUrl);
         if (rainRes.ok) {
             const json = await rainRes.json();
             if(json.hourly && json.hourly.precipitation) {
@@ -146,17 +142,39 @@ async function fetchMeteoData(startDateMs) {
                 });
             }
         }
+    } catch(e) { console.error("Weather API Error:", e); }
 
-        if (marineRes.ok) {
-            const mJson = await marineRes.json();
-            if(mJson.hourly && mJson.hourly.ocean_height) {
-                for(let i=0; i<720; i++) {
-                    let val = mJson.hourly.ocean_height[i];
-                    apiTideData[i] = (val !== null && val !== undefined) ? val * 3.28084 : null;
+    // 2. 潮汐CSV（ローカル）の取得
+    const stationCode = TIDE_STATIONS[currentTideStationIndex].code;
+    const csvFileName = `tides/tide_${stationCode}_${targetYear}.csv`; // 例: tides/tide_EN_2026.csv
+    
+    try {
+        const tideRes = await fetch(csvFileName);
+        if (tideRes.ok) {
+            const tideTxt = await tideRes.text();
+            const lines = tideTxt.split('\n');
+            
+            for (let i = 1; i < lines.length; i++) {
+                const parts = lines[i].split(',');
+                if (parts.length >= 3) {
+                    const dateStr = standardizeDateKey(parts[0]);
+                    // カレンダーの表示期間（30日間）のみを抽出して配列に入れる
+                    const timeMs = new Date(`${dateStr}T${parts[1].trim()}:00+09:00`).getTime();
+                    
+                    if (timeMs >= startDateMs && timeMs <= startDateMs + 30 * 86400000) {
+                        const tide = parseFloat(parts[2].trim());
+                        if (!isNaN(timeMs) && !isNaN(tide)) {
+                            highLowTidePoints.push({ time: timeMs, tide: tide });
+                        }
+                    }
                 }
             }
+            highLowTidePoints.sort((a, b) => a.time - b.time);
+        } else {
+            console.warn(`CSVファイルが見つかりません: ${csvFileName}`);
+            // CSVがない場合は波線を描かない（エラーにはしない）
         }
-    } catch(e) { console.error("Open-Meteo API Error:", e); }
+    } catch(e) { console.error("Tide CSV Fetch Error:", e); }
 }
 
 async function loadAllData() {
@@ -218,13 +236,13 @@ async function updateCalendarCycle() {
 
     computeMonthDays(startDate);
     
-    // APIから雨と潮の両方のデータを取得
-    await fetchMeteoData(cycleStartTimeMs);
+    // API天気とローカル潮汐CSVを取得
+    await fetchMeteoAndTideData(cycleStartTimeMs);
 
     drawLunarShadow(cycleStartTimeMs);
     drawAstronomicalPins(cycleStartTimeMs);
     drawDynamicLines();
-    drawTideGraph(cycleStartTimeMs); 
+    drawTideGraph(cycleStartTimeMs); // CSVのデータを使って描画
     drawDailyRainStats(startDate);   
     drawLunarMansions(cycleStartTimeMs);
     renderSavedData();
