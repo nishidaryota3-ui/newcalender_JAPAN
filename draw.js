@@ -1,4 +1,4 @@
-// draw.js (SVG描画モジュール) - 動的API対応版
+// draw.js (SVG描画モジュール) - ローカルCSV(highLowTidePoints)対応版
 
 if (typeof window.mansions === 'undefined') {
     window.mansions = [
@@ -251,7 +251,6 @@ function drawDailyRainStats(startDate) {
     for (let i = 0; i < window.currentMonthDays; i++) {
         const loopDate = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
         const dateStr = formatDateStr(loopDate);
-        // APIから取得した localRainData をそのまま使用
         if (localRainData[dateStr] !== undefined && localRainData[dateStr] > 0) {
             const rain = localRainData[dateStr];
             const startAngle = (currentStartSegment + i * 4) * 3;
@@ -282,7 +281,7 @@ function drawDailyRainStats(startDate) {
     }
 }
 
-// ▼▼ 変更箇所：APIから取得した毎時データを使って滑らかな潮汐グラフを描く ▼▼
+// ▼▼ 修正箇所：CSVから読み込んだ highLowTidePoints を使って波線を描画する ▼▼
 function drawTideGraph(cycleStartTimeMs) {
     const waveLayer = document.getElementById("layer-tide-wave");
     const guideLayer = document.getElementById("layer-guide-tide");
@@ -290,36 +289,46 @@ function drawTideGraph(cycleStartTimeMs) {
     if(guideLayer) guideLayer.innerHTML = "";
     if (concentricRings.length < 23) return;
 
+    // データがない場合は目盛りだけ描いて波線は描かない
+    if (!highLowTidePoints || highLowTidePoints.length === 0) return;
+
     const stGraph = window.layerSettings.tideGraph;
     const stLine = window.layerSettings.guideTideLine || window.layerSettings.guideTide;
     const stText = window.layerSettings.guideTideText || window.layerSettings.guideTide;
 
     const rMin = concentricRings[16];
     const rMax = concentricRings[22];
-    const totalHours = window.currentMonthDays * 24;
 
     let pathD = "";
     const startAngle = currentStartSegment * 3;
     
-    for (let h = 0; h < totalHours; h++) {
-        const tideFt = apiTideData[h];
-        if (tideFt === null || tideFt === undefined) continue;
+    // CSVから取得した毎時データ（highLowTidePoints）を順番に線で結ぶ
+    highLowTidePoints.forEach((pt, index) => {
+        // カレンダーの開始時間からの経過時間（ミリ秒）
+        const diffMs = pt.time - cycleStartTimeMs;
+        // 経過時間から「時間（hours）」を割り出す
+        const hours = diffMs / 3600000;
+        
+        // カレンダーの描画範囲（通常は30日 = 720時間）外のデータは無視
+        if (hours >= 0 && hours <= window.currentMonthDays * 24) {
+            const r = window.getTideRadius(pt.tide, rMin, rMax); 
+            // 1時間あたり0.5度進む
+            const angle = startAngle + hours * 0.5;
+            const coords = polarToCartesian(cx, cy, r, angle);
 
-        const r = window.getTideRadius(tideFt, rMin, rMax); 
-        const angle = startAngle + h * 0.5;
-        const coords = polarToCartesian(cx, cy, r, angle);
-
-        if (pathD === "") {
-            pathD += `M ${coords.x},${coords.y} `;
-        } else {
-            pathD += `L ${coords.x},${coords.y} `;
+            if (pathD === "") {
+                pathD += `M ${coords.x},${coords.y} `;
+            } else {
+                pathD += `L ${coords.x},${coords.y} `;
+            }
         }
-    }
+    });
     
     if (pathD !== "") {
         if(waveLayer) waveLayer.appendChild(createSVGElem("path", { d: pathD, fill: "none", stroke: stGraph.stroke, "stroke-width": stGraph.strokeWidth, opacity: stGraph.opacity, "stroke-linejoin": "round" }));
     }
 
+    // 目盛り線の描画
     [-1.5, 0, 1.5, 3.0, 4.5, 6.0, 7.5].forEach(ft => {
         const r = window.getTideRadius(ft, rMin, rMax); 
         if(guideLayer) guideLayer.appendChild(createSVGElem("circle", { class: "layer-guide-tide-line", cx: cx, cy: cy, r: r, fill: "none", stroke: stLine.stroke, "stroke-width": stLine.strokeWidth, "stroke-dasharray": "4,4", opacity: stLine.opacity }));
