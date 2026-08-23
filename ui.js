@@ -50,6 +50,12 @@ window.checkAvailableTides = async function(year) {
 };
 
 function initUI() {
+    // レイヤーパネルの見出しを中央揃えにする処理
+    const layerPanelHeader = document.querySelector('#layer-panel h3');
+    if (layerPanelHeader) {
+        layerPanelHeader.style.textAlign = 'center';
+    }
+
     const oldPalette = document.getElementById('palette');
     if (oldPalette) oldPalette.remove();
     document.querySelectorAll('.panel-ui').forEach(el => el.remove());
@@ -67,12 +73,12 @@ function initUI() {
     navDiv.innerHTML = `
         <div style="display:flex; align-items:center; gap:15px; border-right:1px solid rgba(212,175,55,0.3); padding-right:15px;">
             <div style="display:flex; align-items:center; gap:5px;">
-                <span style="font-size:12px; color:#8b949e;">☔ 雨(CSV):</span>
+                <span style="font-size:12px; color:#8b949e;">雨(CSV):</span>
                 <input type="text" id="locationInput" placeholder="地名を入力" value="${currentLocationName}" style="width:90px; padding:4px; border-radius:4px; border:1px solid #555; background:#222; color:#fff; font-size:12px;">
                 <button id="searchLocationBtn" style="background:#0ea5e9; border:none; color:#fff; padding:4px 8px; cursor:pointer; border-radius:4px; font-weight:bold; font-size:12px;">読込</button>
             </div>
             <div style="display:flex; align-items:center; gap:5px;">
-                <span style="font-size:12px; color:#8b949e;">🌊 潮(CSV):</span>
+                <span style="font-size:12px; color:#8b949e;">潮(CSV):</span>
                 <select id="tideSelect" style="padding:4px; border-radius:4px; border:1px solid #555; background:#222; color:#fff; font-size:12px; max-width: 140px;">
                     ${tideOptions}
                 </select>
@@ -677,11 +683,10 @@ function initUI() {
         if (document.getElementById('design-panel').style.display === 'block') loadPanelData();
     };
 
-    // ★ APIを使った検索機能を廃止し、CSVの地名を更新するだけの機能に変更 ★
     document.getElementById('searchLocationBtn').onclick = () => {
         const query = document.getElementById('locationInput').value.trim();
         if(!query) return;
-        currentLocationName = query; // rainフォルダのCSV名に反映される
+        currentLocationName = query; 
         if(typeof updateCalendarCycle === 'function') updateCalendarCycle();
     };
 
