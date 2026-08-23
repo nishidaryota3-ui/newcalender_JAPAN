@@ -1,4 +1,4 @@
-// main.js (司令塔・初期化モジュール) - ジオコーディング連携準備版
+// main.js (司令塔・初期化モジュール) - API完全連携（CSV撤廃）版
 
 window.defaultLayerSettings = {
     canvasBg: { fill: "#f5f3eb" },
@@ -110,27 +110,54 @@ let koyomiDatabase = {};
 const KOYOMI_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRqoX31YV0YAO3Mq4WatmLhjP7uUSF6dPMy3D2H3ktEFDFg1X1gJmoIXkul9JpS4aLgK9Ze3SSbV9BZ/pub?gid=0&single=true&output=csv';
 const HAIKU_CSV_URL = 'https://docs.google.com/spreadsheets/d/1m0y8AOJNx1Ad4I44poPheQAQNki1-QQIwi9wSw8jaBg/export?format=csv&gid=126185184';
 
+// ▼▼ 変更箇所：天気と海洋の2つのAPIを同時にフェッチする統合関数 ▼▼
 async function fetchMeteoData(startDateMs) {
     if (typeof loader !== 'undefined') loader.style.display = 'flex';
     const dStart = new Date(startDateMs);
     const dEnd = new Date(startDateMs + 30 * 86400000);
+    
+    // 古いデータをリセット
     apiRainData = new Array(720).fill(null);
+    apiTideData = new Array(720).fill(null);
+    localRainData = {}; 
     
+    const sDate = formatDateStr(dStart);
+    const eDate = formatDateStr(dEnd);
+
     const isHistorical = dEnd.getTime() < Date.now() - (5 * 86400000);
-    const baseUrl = isHistorical ? 'https://archive-api.open-meteo.com/v1/archive' : 'https://api.open-meteo.com/v1/forecast';
+    const weatherBaseUrl = isHistorical ? 'https://archive-api.open-meteo.com/v1/archive' : 'https://api.open-meteo.com/v1/forecast';
     
-    // ▼▼ 変更箇所：固定値(PALAU_LAT)から、検索された現在地(currentLat)に変更 ▼▼
-    const rainApiUrl = `${baseUrl}?latitude=${currentLat}&longitude=${currentLon}&hourly=precipitation&start_date=${formatDateStr(dStart)}&end_date=${formatDateStr(dEnd)}&timezone=Asia%2FTokyo`;
+    // 天気API（1時間ごとの降水量と、1日ごとの合計降水量）
+    const rainApiUrl = `${weatherBaseUrl}?latitude=${currentLat}&longitude=${currentLon}&hourly=precipitation&daily=precipitation_sum&start_date=${sDate}&end_date=${eDate}&timezone=Asia%2FTokyo`;
+    // 海洋API（1時間ごとの潮位）
+    const marineApiUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${currentLat}&longitude=${currentLon}&hourly=ocean_height&start_date=${sDate}&end_date=${eDate}&timezone=Asia%2FTokyo`;
 
     try {
-        const res = await fetch(rainApiUrl);
-        if (res.ok) {
-            const json = await res.json();
+        const [rainRes, marineRes] = await Promise.all([fetch(rainApiUrl), fetch(marineApiUrl)]);
+        
+        if (rainRes.ok) {
+            const json = await rainRes.json();
             if(json.hourly && json.hourly.precipitation) {
                 for(let i=0; i<720; i++) apiRainData[i] = json.hourly.precipitation[i] || 0;
             }
+            if(json.daily && json.daily.precipitation_sum && json.daily.time) {
+                json.daily.time.forEach((t, idx) => {
+                    localRainData[standardizeDateKey(t)] = json.daily.precipitation_sum[idx] || 0;
+                });
+            }
         }
-    } catch(e) { console.error("Open-Meteo Error:", e); }
+
+        if (marineRes.ok) {
+            const mJson = await marineRes.json();
+            if(mJson.hourly && mJson.hourly.ocean_height) {
+                for(let i=0; i<720; i++) {
+                    let val = mJson.hourly.ocean_height[i];
+                    // APIはメートルで返してくるので、既存のUI設定（ft）に合わせるため変換 (1m = 3.28084ft)
+                    apiTideData[i] = (val !== null && val !== undefined) ? val * 3.28084 : null;
+                }
+            }
+        }
+    } catch(e) { console.error("Open-Meteo API Error:", e); }
     if (typeof loader !== 'undefined') loader.style.display = 'none';
 }
 
@@ -142,9 +169,9 @@ async function loadAllData() {
         } catch(e) { return null; }
     };
 
-    const [koyomiTxt, haikuTxt, rainTxt, tideTxt] = await Promise.all([
-        fetchCSV(KOYOMI_CSV_URL), fetchCSV(HAIKU_CSV_URL),
-        fetchCSV('palau_rain.csv'), fetchCSV('palau_tide.csv')
+    // ▼▼ 変更箇所：雨と潮汐のCSV読み込みを完全に撤廃 ▼▼
+    const [koyomiTxt, haikuTxt] = await Promise.all([
+        fetchCSV(KOYOMI_CSV_URL), fetchCSV(HAIKU_CSV_URL)
     ]);
 
     if (koyomiTxt) {
@@ -165,34 +192,6 @@ async function loadAllData() {
                 window.haikuDatabase[dateKey].push(row[0]);
             }
         }
-    }
-
-    if (rainTxt) {
-        const lines = rainTxt.split('\n');
-        for (let i = 1; i < lines.length; i++) {
-            const parts = lines[i].split(',');
-            if (parts.length >= 2 && parts[0].trim() && !isNaN(parseFloat(parts[1]))) {
-                localRainData[standardizeDateKey(parts[0])] = parseFloat(parts[1].trim());
-            }
-        }
-    }
-
-    if (tideTxt) {
-        const lines = tideTxt.split('\n');
-        for (let i = 1; i < lines.length; i++) {
-            const parts = lines[i].split(',');
-            if (parts.length >= 3) {
-                const dateStr = standardizeDateKey(parts[0]);
-                const timeStr = parts[1].trim().substring(0, 5);
-                const timeParts = timeStr.split(':');
-                if(timeParts.length < 2) continue;
-                
-                const timeMs = new Date(`${dateStr}T${timeParts[0].padStart(2, '0')}:${timeParts[1].padStart(2, '0')}:00`).getTime();
-                const tide = parseFloat(parts[2].trim());
-                if (!isNaN(timeMs) && !isNaN(tide)) highLowTidePoints.push({ time: timeMs, tide: tide });
-            }
-        }
-        highLowTidePoints.sort((a, b) => a.time - b.time);
     }
 }
 
@@ -221,16 +220,21 @@ async function updateCalendarCycle() {
     if (cycleDisplay) cycleDisplay.innerHTML = `${startDate.getFullYear()}年 ${startDate.getMonth() + 1}月 <span style="font-size:10px;">▼</span><br><span style="font-size:11px; color:#8b949e;">新月: ${startDate.getMonth() + 1}月${startDate.getDate()}日〜</span>`;
 
     computeMonthDays(startDate);
+    
+    // ▼▼ 変更箇所：描画する「前」に、APIからすべての気象・海洋データを取得しておく ▼▼
+    await fetchMeteoData(cycleStartTimeMs);
+
     drawLunarShadow(cycleStartTimeMs);
     drawAstronomicalPins(cycleStartTimeMs);
     drawDynamicLines();
-    drawTideGraph(cycleStartTimeMs);
-    drawDailyRainStats(startDate);
+    drawTideGraph(cycleStartTimeMs); // APIのデータを使って描画されます
+    drawDailyRainStats(startDate);   // APIのデータを使って描画されます
     drawLunarMansions(cycleStartTimeMs);
     renderSavedData();
     drawTimeLabels();
     drawKoyomiEvents(startDate);
     drawHaikus(startDate);
+    drawRainfallGraph(cycleStartTimeMs);
 
     if (masterGroup) masterGroup.setAttribute('transform', `rotate(${globalRotation}, ${cx}, ${cy})`);
 
@@ -246,9 +250,6 @@ async function updateCalendarCycle() {
             }
         });
     }
-
-    await fetchMeteoData(cycleStartTimeMs);
-    drawRainfallGraph(cycleStartTimeMs);
 }
 
 async function initApp() {
