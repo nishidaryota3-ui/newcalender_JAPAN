@@ -1,4 +1,4 @@
-// ui.js (UI構築・イベントモジュール) - 潮汐プルダウン対応版
+// ui.js (UI構築・イベントモジュール) - ハイブリッド対応版
 
 const TEXT_TARGETS = ['gregorian', 'weekday', 'sekki', 'kou', 'zassetsu', 'holiday', 'important', 'wafuText', 'gregorianText', 'dailyRainText', 'guideTime', 'guideTideText', 'guideRainText', 'lunarMansion', 'eventShinto', 'eventBuddhism', 'eventChurch', 'eventSonota', 'lunar', 'haikuText'];
 const SHAPE_TARGETS = ['baseSvg', 'lunarShadow', 'astroPins', 'dateLines', 'tideGraph', 'rainGraph', 'dailyRainBg', 'guideTideLine', 'guideRainLine', 'canvasBg'];
@@ -38,7 +38,7 @@ function initUI() {
     navDiv.id = 'nav-bar';
     navDiv.style = "position:fixed; top:30px; right:30px; background:rgba(25,30,40,0.85); padding:10px 15px; border-radius:8px; color:#d4af37; z-index:100; display:flex; gap:15px; align-items:center; border: 1px solid rgba(212,175,55,0.3); backdrop-filter: blur(10px);";
     
-    // ▼▼ 変更箇所：天気検索と潮汐プルダウンを配置 ▼▼
+    // ▼ 潮汐プルダウンの生成 ▼
     let tideOptions = "";
     TIDE_STATIONS.forEach((station, idx) => {
         tideOptions += `<option value="${idx}" ${idx === currentTideStationIndex ? "selected" : ""}>${station.name}</option>`;
@@ -53,7 +53,7 @@ function initUI() {
             </div>
             <div style="display:flex; align-items:center; gap:5px;">
                 <span style="font-size:12px; color:#8b949e;">🌊 潮:</span>
-                <select id="tideSelect" style="padding:4px; border-radius:4px; border:1px solid #555; background:#222; color:#fff; font-size:12px;">
+                <select id="tideSelect" style="padding:4px; border-radius:4px; border:1px solid #555; background:#222; color:#fff; font-size:12px; max-width: 140px;">
                     ${tideOptions}
                 </select>
             </div>
@@ -664,7 +664,6 @@ function initUI() {
         if (document.getElementById('design-panel').style.display === 'block') loadPanelData();
     };
 
-    // ▼▼ 変更箇所：天気検索と潮汐プルダウンのイベント処理 ▼▼
     document.getElementById('searchLocationBtn').onclick = async () => {
         const query = document.getElementById('locationInput').value.trim();
         if(!query) return;
@@ -697,19 +696,17 @@ function initUI() {
         if (typeof loader !== 'undefined') loader.style.display = 'none';
     };
 
-    // 潮汐のプルダウンが変更された時の処理
     document.getElementById('tideSelect').onchange = async (e) => {
         currentTideStationIndex = parseInt(e.target.value);
         if(typeof updateCalendarCycle === 'function') {
             if (typeof loader !== 'undefined') {
-                loader.innerHTML = `🌊 潮汐データを再取得中...`;
+                loader.innerHTML = `🌊 潮汐データ（CSV）を再読み込み中...`;
                 loader.style.display = 'flex';
             }
             await updateCalendarCycle();
             if (typeof loader !== 'undefined') loader.style.display = 'none';
         }
     };
-    // ▲▲ 追加ここまで ▲▲
 
     const printViewBox = "-304.31 -33.52 2450 2450"; 
 
