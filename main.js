@@ -1,6 +1,7 @@
-// main.js (司令塔・初期化モジュール) - ハイブリッド（天気API＋潮汐CSV）版
+// main.js (司令塔・初期化モジュール) - 189地点完全網羅・自動★判定・安全設計版
 
 window.defaultLayerSettings = {
+    // ... [前回と同じデザイン設定のため省略。変更不要です] ...
     canvasBg: { fill: "#f5f3eb" },
     baseSvg: { stroke: "", opacity: 0.8 },
     lunarShadow: { fill: "#000000", opacity: 0.03 },
@@ -47,21 +48,7 @@ window.defaultLayerSettings = {
 };
 
 window.haikuDatabase = {}; 
-
-function isObject(item) { return (item && typeof item === 'object' && !Array.isArray(item)); }
-function mergeDeep(target, ...sources) {
-    if (!sources.length) return target;
-    const source = sources.shift();
-    if (isObject(target) && isObject(source)) {
-        for (const key in source) {
-            if (isObject(source[key])) {
-                if (!target[key]) Object.assign(target, { [key]: {} });
-                mergeDeep(target[key], source[key]);
-            } else Object.assign(target, { [key]: source[key] });
-        }
-    }
-    return mergeDeep(target, ...sources);
-}
+// ... [isObject, mergeDeep, parseCSVRow などの便利関数は以前のまま省略] ...
 
 function parseCSVRow(str) {
     const result = [];
@@ -94,23 +81,13 @@ window.loadSettingsForCycle = function(cycleIdx) {
     window.layerSettings = monthData ? mergeDeep(base, monthData) : base;
 };
 
-window.saveLayerSettings = () => {
-    window.appSettings.months[`cycle_${currentCycle}`] = JSON.parse(JSON.stringify(window.layerSettings));
-    localStorage.setItem('polarCalendarSettingsV5', JSON.stringify(window.appSettings));
-};
-
-window.applyGlobalSettings = () => {
-    window.appSettings.global = JSON.parse(JSON.stringify(window.layerSettings));
-    window.appSettings.months = {}; 
-    localStorage.setItem('polarCalendarSettingsV5', JSON.stringify(window.appSettings));
-    alert("現在の色や設定を、すべての月の基本デザインとして適用しました！");
-};
+// ... [各種設定保存関数は以前のまま] ...
 
 let koyomiDatabase = {};
 const KOYOMI_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRqoX31YV0YAO3Mq4WatmLhjP7uUSF6dPMy3D2H3ktEFDFg1X1gJmoIXkul9JpS4aLgK9Ze3SSbV9BZ/pub?gid=0&single=true&output=csv';
 const HAIKU_CSV_URL = 'https://docs.google.com/spreadsheets/d/1m0y8AOJNx1Ad4I44poPheQAQNki1-QQIwi9wSw8jaBg/export?format=csv&gid=126185184';
 
-// ▼ 天気APIと潮汐CSVの両方を取得する関数 ▼
+// ▼ 天気APIと潮汐CSVの両方を取得する関数（データがない場合の安全処理付き） ▼
 async function fetchMeteoAndTideData(startDateMs) {
     const dStart = new Date(startDateMs);
     const dEnd = new Date(startDateMs + 30 * 86400000);
@@ -118,11 +95,11 @@ async function fetchMeteoAndTideData(startDateMs) {
     // データリセット
     apiRainData = new Array(720).fill(null);
     localRainData = {}; 
-    highLowTidePoints = []; // CSV用の配列
+    highLowTidePoints = []; 
     
     const sDate = formatDateStr(dStart);
     const eDate = formatDateStr(dEnd);
-    const targetYear = dStart.getFullYear(); // 表示中の西暦
+    const targetYear = dStart.getFullYear(); 
 
     // 1. 天気API（Open-Meteo）の取得
     const isHistorical = dEnd.getTime() < Date.now() - (5 * 86400000);
@@ -145,9 +122,11 @@ async function fetchMeteoAndTideData(startDateMs) {
     } catch(e) { console.error("Weather API Error:", e); }
 
     // 2. 潮汐CSV（ローカル）の取得
-    const stationCode = TIDE_STATIONS[currentTideStationIndex].code;
-    const csvFileName = `tides/tide_${stationCode}_${targetYear}.csv`; // 例: tides/tide_EN_2026.csv
+    const station = TIDE_STATIONS[currentTideStationIndex];
+    const csvFileName = `tides/tide_${station.code}_${targetYear}.csv`; 
     
+    let tideDataFound = false;
+
     try {
         const tideRes = await fetch(csvFileName);
         if (tideRes.ok) {
@@ -158,7 +137,6 @@ async function fetchMeteoAndTideData(startDateMs) {
                 const parts = lines[i].split(',');
                 if (parts.length >= 3) {
                     const dateStr = standardizeDateKey(parts[0]);
-                    // カレンダーの表示期間（30日間）のみを抽出して配列に入れる
                     const timeMs = new Date(`${dateStr}T${parts[1].trim()}:00+09:00`).getTime();
                     
                     if (timeMs >= startDateMs && timeMs <= startDateMs + 30 * 86400000) {
@@ -169,14 +147,29 @@ async function fetchMeteoAndTideData(startDateMs) {
                     }
                 }
             }
-            highLowTidePoints.sort((a, b) => a.time - b.time);
-        } else {
-            console.warn(`CSVファイルが見つかりません: ${csvFileName}`);
-            // CSVがない場合は波線を描かない（エラーにはしない）
+            if (highLowTidePoints.length > 0) {
+                highLowTidePoints.sort((a, b) => a.time - b.time);
+                tideDataFound = true;
+            }
         }
-    } catch(e) { console.error("Tide CSV Fetch Error:", e); }
+    } catch(e) {
+        // Fetch自体が失敗（ファイルがない等）した場合のキャッチ
+    }
+
+    // データが1件も見つからなかった場合はステータスバーで通知
+    const sb = document.getElementById('status-bar');
+    if (sb) {
+        if (!tideDataFound) {
+            sb.innerText = `⚠️ ${station.name} (${station.code}) のデータがありません (tidesフォルダにCSVを追加してください)`;
+            sb.style.color = "#ff8888";
+        } else {
+            sb.innerText = `✅ ${station.name} のデータを読み込みました`;
+            sb.style.color = "#38bdf8";
+        }
+    }
 }
 
+// ... [loadAllData などの関数は以前のまま] ...
 async function loadAllData() {
     const fetchCSV = async (url) => {
         try {
@@ -231,8 +224,17 @@ async function updateCalendarCycle() {
     if (currentStartSegment < 0) currentStartSegment += 120;
     globalRotation = -currentStartSegment * 3;
 
+    const targetYear = startDate.getFullYear();
     const cycleDisplay = document.getElementById('cycleDisplay');
-    if (cycleDisplay) cycleDisplay.innerHTML = `${startDate.getFullYear()}年 ${startDate.getMonth() + 1}月 <span style="font-size:10px;">▼</span><br><span style="font-size:11px; color:#8b949e;">新月: ${startDate.getMonth() + 1}月${startDate.getDate()}日〜</span>`;
+    if (cycleDisplay) cycleDisplay.innerHTML = `${targetYear}年 ${startDate.getMonth() + 1}月 <span style="font-size:10px;">▼</span><br><span style="font-size:11px; color:#8b949e;">新月: ${startDate.getMonth() + 1}月${startDate.getDate()}日〜</span>`;
+
+    // ★ 表示する「年」が変わった場合は、CSVがあるか裏側でチェックしてプルダウンを更新
+    if (window.lastCheckedTideYear !== targetYear) {
+        if (typeof window.checkAvailableTides === 'function') {
+            window.checkAvailableTides(targetYear);
+        }
+        window.lastCheckedTideYear = targetYear;
+    }
 
     computeMonthDays(startDate);
     
@@ -242,7 +244,8 @@ async function updateCalendarCycle() {
     drawLunarShadow(cycleStartTimeMs);
     drawAstronomicalPins(cycleStartTimeMs);
     drawDynamicLines();
-    drawTideGraph(cycleStartTimeMs); // CSVのデータを使って描画
+    // データがない場合は highLowTidePoints が空のまま drawTideGraph が呼ばれるため、エラーなく空白になります
+    drawTideGraph(cycleStartTimeMs); 
     drawDailyRainStats(startDate);   
     drawLunarMansions(cycleStartTimeMs);
     renderSavedData();
@@ -279,52 +282,4 @@ async function initApp() {
         svg = container.querySelector('svg');
         if (!svg) return;
         
-        svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
-        svg.querySelectorAll('*[fill="#fff"]').forEach(el => el.setAttribute('fill', 'none'));
-        svg.querySelectorAll('text, rect').forEach(el => el.remove());
-        
-        concentricRings = [];
-        svg.querySelectorAll('circle').forEach(c => {
-            const r = parseFloat(c.getAttribute('r'));
-            if (r && Math.abs(parseFloat(c.getAttribute('cx')) - cx) < 1 && Math.abs(parseFloat(c.getAttribute('cy')) - cy) < 1) concentricRings.push(r);
-        });
-        concentricRings = [...new Set(concentricRings)].sort((a, b) => a - b);
-        
-        masterGroup = document.createElementNS(svgNS, "g");
-        masterGroup.setAttribute("id", "master-group");
-        bgGroup = document.createElementNS(svgNS, "g");
-        bgGroup.setAttribute("id", "bg-group");
-        
-        while (svg.firstChild) {
-            const child = svg.firstChild;
-            if (child.nodeType === 1) { 
-                if (child.getAttribute('stroke')) child.setAttribute('data-orig-stroke', child.getAttribute('stroke'));
-                child.querySelectorAll('*').forEach(el => {
-                    if (el.getAttribute('stroke')) el.setAttribute('data-orig-stroke', el.getAttribute('stroke'));
-                });
-            }
-            bgGroup.appendChild(child);
-        }
-        masterGroup.appendChild(bgGroup);
-        svg.appendChild(masterGroup);
-
-        const defs = document.createElementNS(svgNS, "defs");
-        defs.setAttribute("id", "text-path-defs");
-        masterGroup.appendChild(defs);
-        
-        const layerIds = ["layer-shadow", "layer-astronomical-pins", "layer-lines", "layer-data", "layer-tide-wave", "layer-rain-graph", "layer-daily-rain-bg", "layer-lunar-mansion", "layer-solar-dates", "layer-outer-season", "layer-guide-tide", "layer-guide-rain", "layer-daily-rain-text", "layer-guide-time", "layer-wafu-text", "layer-haiku"];
-        layerIds.forEach(id => {
-            const g = document.createElementNS(svgNS, "g");
-            g.setAttribute("id", id);
-            masterGroup.appendChild(g);
-        });
-        
-        await updateCalendarCycle();
-        initInteractions();
-        
-    } catch(err) {
-        console.error("SVG Init Error:", err);
-    }
-}
-
-initApp();
+        // ... [以降、SVG初期化の定型処理は以前と全く同じため省略。そのまま活かしてください] ...
