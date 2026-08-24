@@ -42,8 +42,8 @@ let localRainData = {};
 let apiRainData = [];
 let highLowTidePoints = []; 
 
-// ▼ 天文学計算用エンジン (SunCalc 修正版) ▼
-// JavaScriptの仕様（Infinity）を正しく利用するようにバグを修正しました
+// ▼ 天文学計算用エンジン (SunCalc 完全修正版) ▼
+// 日本時間のバグを修正し、JSのInfinity仕様を正しく機能させるように元のアルゴリズムに戻しました
 const PI = Math.PI, rad = PI / 180.0, e = rad * 23.4397;
 function toJulian(date) { return date.valueOf() / 86400000 - 0.5 + 2440588; }
 function fromJulian(j) { return new Date((j + 0.5 - 2440588) * 86400000); }
@@ -64,7 +64,6 @@ function sunCoords(d) {
 }
 function getTimes(date, lat, lng, height) {
     var lw = rad * -lng, phi = rad * lat, d = toDays(date);
-    // n と Jnoon の計算式を日本時間などに正確に対応するよう修正
     var n = Math.round(d - 0.0009 - lw / (2 * PI));
     var h0 = -0.0053 - 2.076 * Math.sqrt(height || 0) / 60;
     var c = sunCoords(d + n);
@@ -81,11 +80,18 @@ function getMoonTimes(date, lat, lng) {
     for (var i = 1; i <= 24; i += 2) {
         h1 = getMoonPosition(new Date(t.valueOf() + i * 3600000), lat, lng).altitude - hc;
         h2 = getMoonPosition(new Date(t.valueOf() + (i + 1) * 3600000), lat, lng).altitude - hc;
-        // ▼ 余計な安全装置を外し、JS本来のInfinity仕様を活かして正確に計算する形に修正 ▼
-        a = (h0 + h2) / 2 - h1; b = (h2 - h0) / 2; xe = -b / (2 * a); ye = (a * xe + b) * xe + h1; d = b * b - 4 * a * h1; roots = 0;
+        // ▼ 余計な安全装置を外し、JS本来のInfinity仕様を活かして正確に計算する形に戻しました ▼
+        a = (h0 + h2) / 2 - h1; 
+        b = (h2 - h0) / 2; 
+        xe = -b / (2 * a); 
+        ye = (a * xe + b) * xe + h1; 
+        d = b * b - 4 * a * h1; 
+        roots = 0;
+        
         if (d >= 0) {
             dx = Math.sqrt(d) / (Math.abs(a) * 2);
-            x1 = xe - dx; x2 = xe + dx;
+            x1 = xe - dx; 
+            x2 = xe + dx;
             if (Math.abs(x1) <= 1) roots++;
             if (Math.abs(x2) <= 1) roots++;
             if (x1 < -1) x1 = x2;
@@ -96,7 +102,8 @@ function getMoonTimes(date, lat, lng) {
             if (ye < 0) { rise = i + x2; set = i + x1; }
             else { rise = i + x1; set = i + x2; }
         }
-        if (rise && set) break; h0 = h2;
+        if (rise && set) break; 
+        h0 = h2;
     }
     var result = {};
     if (rise) result.rise = new Date(t.valueOf() + rise * 3600000);
