@@ -1,7 +1,8 @@
-// ui.js (UI構築・イベントモジュール) - パネルバグ完全修復＆雨CSV対応版
+// ui.js (UI構築・イベントモジュール) - 月の出没ピン・日の出没テキスト追加版
 
-const TEXT_TARGETS = ['gregorian', 'weekday', 'sekki', 'kou', 'zassetsu', 'holiday', 'important', 'wafuText', 'gregorianText', 'dailyRainText', 'guideTime', 'guideTideText', 'guideRainText', 'lunarMansion', 'eventShinto', 'eventBuddhism', 'eventChurch', 'eventSonota', 'lunar', 'haikuText'];
-const SHAPE_TARGETS = ['baseSvg', 'lunarShadow', 'astroPins', 'dateLines', 'tideGraph', 'rainGraph', 'dailyRainBg', 'guideTideLine', 'guideRainLine', 'canvasBg'];
+// ▼ ここに新しく「moonEventPin」と「sunEventText」を追加しました ▼
+const TEXT_TARGETS = ['gregorian', 'weekday', 'sekki', 'kou', 'zassetsu', 'holiday', 'important', 'wafuText', 'gregorianText', 'dailyRainText', 'guideTime', 'guideTideText', 'guideRainText', 'lunarMansion', 'eventShinto', 'eventBuddhism', 'eventChurch', 'eventSonota', 'lunar', 'haikuText', 'sunEventText'];
+const SHAPE_TARGETS = ['baseSvg', 'lunarShadow', 'astroPins', 'dateLines', 'tideGraph', 'rainGraph', 'dailyRainBg', 'guideTideLine', 'guideRainLine', 'canvasBg', 'moonEventPin'];
 
 const TARGET_NAMES = {
     canvasBg: "キャンバス背景", baseSvg: "ベース図形", lunarShadow: "月相シャドウ", astroPins: "天文学的ピン (朔望)", 
@@ -12,7 +13,8 @@ const TARGET_NAMES = {
     gregorian: "新暦日付", weekday: "曜日", lunar: "旧暦 (月相対応)", 
     sekki: "24節気", kou: "72候", wafuText: "右上 月名 (旧暦)", gregorianText: "右上 月名 (新暦)", 
     holiday: "祝日 (上段)", zassetsu: "雑節 (中段)", important: "重要年中行事 (下段)", 
-    eventShinto: "神事", eventBuddhism: "仏事", eventChurch: "教会行事", eventSonota: "その他", haikuText: "俳句 (一番外周)"
+    eventShinto: "神事", eventBuddhism: "仏事", eventChurch: "教会行事", eventSonota: "その他", haikuText: "俳句 (一番外周)",
+    moonEventPin: "月の出・月の入り (ピン)", sunEventText: "日の出・日の入り (文字)" // 追加
 };
 
 const LAYER_VISIBILITY_MAP = {
@@ -23,7 +25,9 @@ const LAYER_VISIBILITY_MAP = {
     "toggle-guide-tide-text": ".layer-guide-tide-text", "toggle-guide-rain-line": ".layer-guide-rain-line", "toggle-guide-rain-text": ".layer-guide-rain-text",
     "toggle-date-gregorian": ".layer-date-gregorian", "toggle-date-lunar": ".layer-date-lunar", "toggle-date-weekday": ".layer-date-weekday",
     "toggle-wafu-text": ".layer-wafu-text", "toggle-gregorian-text": ".layer-gregorian-text", "toggle-sekki": ".layer-sekki",
-    "toggle-kou": ".layer-kou", "toggle-zassetsu": ".layer-zassetsu", "toggle-holiday": ".layer-holiday", "toggle-event-important": ".layer-event-important"
+    "toggle-kou": ".layer-kou", "toggle-zassetsu": ".layer-zassetsu", "toggle-holiday": ".layer-holiday", "toggle-event-important": ".layer-event-important",
+    "toggle-moon-event-pin": "#layer-moon-event-pin", // 追加
+    "toggle-sun-event-text": ".layer-sun-event-text"  // 追加
 };
 
 const iconExport = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
@@ -50,11 +54,8 @@ window.checkAvailableTides = async function(year) {
 };
 
 function initUI() {
-    // レイヤーパネルの見出しを中央揃えにする処理
     const layerPanelHeader = document.querySelector('#layer-panel h3');
-    if (layerPanelHeader) {
-        layerPanelHeader.style.textAlign = 'center';
-    }
+    if (layerPanelHeader) layerPanelHeader.style.textAlign = 'center';
 
     const oldPalette = document.getElementById('palette');
     if (oldPalette) oldPalette.remove();
@@ -479,7 +480,7 @@ function initUI() {
                 }
             }
 
-            if (currentDesignTarget === 'astroPins') {
+            if (currentDesignTarget === 'astroPins' || currentDesignTarget === 'moonEventPin') {
                 document.getElementById('dp-row-shape-scale').style.display = 'flex';
                 document.getElementById('dp-row-radius-offset').style.display = 'flex';
                 document.getElementById('dp-shape-scale').value = st.scale || 1;
@@ -560,7 +561,7 @@ function initUI() {
         if(SHAPE_TARGETS.includes(currentDesignTarget) && currentDesignTarget !== 'canvasBg') {
             if(st.fill !== undefined) st.fill = document.getElementById('dp-shape-fill-trans').checked ? "none" : document.getElementById('dp-shape-fill').value;
             
-            if (currentDesignTarget === 'astroPins') {
+            if (currentDesignTarget === 'astroPins' || currentDesignTarget === 'moonEventPin') {
                 st.scale = parseFloat(document.getElementById('dp-shape-scale').value);
                 document.getElementById('dp-shape-scale-val').innerText = st.scale;
                 st.radiusOffset = parseFloat(document.getElementById('dp-radius-offset').value);
@@ -654,12 +655,14 @@ function initUI() {
             if (target === 'lunarShadow' && typeof drawLunarShadow === 'function') drawLunarShadow(window.lastCycleStartTimeMs);
             if (target === 'astroPins' && typeof drawAstronomicalPins === 'function') drawAstronomicalPins(window.lastCycleStartTimeMs);
             if (target === 'lunarMansion' && typeof drawLunarMansions === 'function') drawLunarMansions(window.lastCycleStartTimeMs);
+            if (target === 'moonEventPin' && typeof drawMoonEventPins === 'function') drawMoonEventPins(window.lastCycleStartTimeMs); 
         }
 
         if (window.lastKoyomiStartDate) {
             if (['dailyRainBg', 'dailyRainText'].includes(target) && typeof drawDailyRainStats === 'function') drawDailyRainStats(window.lastKoyomiStartDate);
             if (target === 'haikuText' && typeof drawHaikus === 'function') drawHaikus(window.lastKoyomiStartDate);
             if (['gregorian', 'weekday', 'sekki', 'kou', 'zassetsu', 'holiday', 'important', 'eventShinto', 'eventBuddhism', 'eventChurch', 'eventSonota', 'lunar', 'wafuText', 'gregorianText'].includes(target) && typeof drawKoyomiEvents === 'function') drawKoyomiEvents(window.lastKoyomiStartDate);
+            if (target === 'sunEventText' && typeof drawSunEventText === 'function') drawSunEventText(window.lastKoyomiStartDate); 
         }
     };
 
