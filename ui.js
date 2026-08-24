@@ -1,4 +1,4 @@
-// ui.js (UI構築・イベントモジュール) - 4つの出没ピン・矢印形状完全対応版
+// ui.js (UI構築・イベントモジュール) - 4つの出没ピン・矢印形状完全対応・役割分担徹底版
 
 const TEXT_TARGETS = ['gregorian', 'weekday', 'sekki', 'kou', 'zassetsu', 'holiday', 'important', 'wafuText', 'gregorianText', 'dailyRainText', 'guideTime', 'guideTideText', 'guideRainText', 'lunarMansion', 'eventShinto', 'eventBuddhism', 'eventChurch', 'eventSonota', 'lunar', 'haikuText'];
 const SHAPE_TARGETS = ['baseSvg', 'lunarShadow', 'astroPins', 'dateLines', 'tideGraph', 'rainGraph', 'dailyRainBg', 'guideTideLine', 'guideRainLine', 'canvasBg', 'moonRisePin', 'moonSetPin', 'sunRisePin', 'sunSetPin'];
@@ -13,7 +13,7 @@ const TARGET_NAMES = {
     sekki: "24節気", kou: "72候", wafuText: "右上 月名 (旧暦)", gregorianText: "右上 月名 (新暦)", 
     holiday: "祝日 (上段)", zassetsu: "雑節 (中段)", important: "重要年中行事 (下段)", 
     eventShinto: "神事", eventBuddhism: "仏事", eventChurch: "教会行事", eventSonota: "その他", haikuText: "俳句 (一番外周)",
-    // ▼ 4つに独立した出没ピン ▼
+    // 独立した出没ピンの名称定義
     moonRisePin: "月の出 (ピン)", moonSetPin: "月の入 (ピン)", sunRisePin: "日の出 (ピン)", sunSetPin: "日の入 (ピン)" 
 };
 
@@ -26,6 +26,7 @@ const LAYER_VISIBILITY_MAP = {
     "toggle-date-gregorian": ".layer-date-gregorian", "toggle-date-lunar": ".layer-date-lunar", "toggle-date-weekday": ".layer-date-weekday",
     "toggle-wafu-text": ".layer-wafu-text", "toggle-gregorian-text": ".layer-gregorian-text", "toggle-sekki": ".layer-sekki",
     "toggle-kou": ".layer-kou", "toggle-zassetsu": ".layer-zassetsu", "toggle-holiday": ".layer-holiday", "toggle-event-important": ".layer-event-important",
+    // 独立した出没ピンのIDマッピング
     "toggle-moon-rise": "#layer-moon-rise", "toggle-moon-set": "#layer-moon-set", "toggle-sun-rise": "#layer-sun-rise", "toggle-sun-set": "#layer-sun-set"
 };
 
@@ -178,6 +179,7 @@ function initUI() {
     designPanel.className = 'panel-ui';
     designPanel.style = "display:none; position:fixed; top:100px; left:50%; background:rgba(25,30,40,0.95); padding:0 20px 20px 20px; border-radius:12px; border:1px solid rgba(212,175,55,0.5); color:#fff; z-index:200; box-shadow:0 10px 40px rgba(0,0,0,0.8); min-width:320px; backdrop-filter:blur(10px);";
     
+    // ▼ ここに新しく「arrowUp」「arrowDown」「rhombus」を含めた図形選択を追加しています ▼
     designPanel.innerHTML = `
         <div id="dp-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid rgba(212,175,55,0.3); padding:12px 0 10px 0; cursor:grab; user-select:none;">
             <div id="dp-title" style="color:#d4af37; font-weight:bold; font-size:15px;">デザイン設定</div>
@@ -252,7 +254,6 @@ function initUI() {
                         <option value="triangle">三角 (▲)</option>
                         <option value="rhombus">ひし形 (◆)</option>
                         <option value="star">星 (★)</option>
-                        <!-- ▼ 新しい矢印アイコンの選択肢を追加 ▼ -->
                         <option value="arrowUp">上矢印 (⇧)</option>
                         <option value="arrowDown">下矢印 (⇩)</option>
                     </select>
@@ -387,7 +388,7 @@ function initUI() {
     let currentDesignTarget = null;
     
     const loadPanelData = () => {
-        const st = window.layerSettings[currentDesignTarget];
+        const st = window.layerSettings[currentDesignTarget] || window.defaultLayerSettings[currentDesignTarget];
         if (!st) return;
 
         ['dp-row-lunar-phase', 'dp-group-text', 'dp-group-shape', 'dp-row-shape-type', 'dp-row-shape-fill', 'dp-row-shape-stroke', 'dp-row-shape-stroke-width', 'dp-shape-stroke-orig', 'dp-shape-stroke-orig-text', 'dp-row-offset', 'dp-row-lang', 'dp-row-density', 'dp-row-shape-scale', 'dp-row-radius-offset', 'dp-group-mansion-colors'].forEach(id => {
@@ -568,7 +569,7 @@ function initUI() {
             if(st.fill !== undefined) st.fill = document.getElementById('dp-shape-fill-trans').checked ? "none" : document.getElementById('dp-shape-fill').value;
             
             if (['astroPins', 'moonRisePin', 'moonSetPin', 'sunRisePin', 'sunSetPin'].includes(currentDesignTarget)) {
-                st.shape = document.getElementById('dp-shape').value; // 形の保存
+                st.shape = document.getElementById('dp-shape').value;
                 st.scale = parseFloat(document.getElementById('dp-shape-scale').value);
                 document.getElementById('dp-shape-scale-val').innerText = st.scale;
                 st.radiusOffset = parseFloat(document.getElementById('dp-radius-offset').value);
