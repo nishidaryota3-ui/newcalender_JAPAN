@@ -1,4 +1,4 @@
-// draw.js (SVG描画モジュール) - 矢印アイコン追加＆確実なピン描画（フォールバック実装）版
+// draw.js (SVG描画モジュール) - 矢印アイコン追加＆確実なピン描画版
 
 if (typeof window.mansions === 'undefined') {
     window.mansions = [
@@ -75,7 +75,7 @@ function createStyledText(st, attrs = {}, text = null) {
     return createSVGElem("text", { ...getStyleAttrs(st), ...attrs }, text);
 }
 
-// ▼ 様々な形（矢印含む）をSVGで生成するための汎用関数 ▼
+// ▼ 新規追加: 矢印などの複雑な図形をSVGで生成するための汎用関数 ▼
 function drawPinShape(g, shapeType, size, st) {
     if (shapeType === "none") return;
     const fillCol = st.fill || "none";
@@ -97,12 +97,10 @@ function drawPinShape(g, shapeType, size, st) {
         for(let k=0; k<10; k++) pts += `${k%2===0 ? size*1.2 : size*0.5 * Math.sin(k*36*Math.PI/180)},${-(k%2===0 ? size*1.2 : size*0.5) * Math.cos(k*36*Math.PI/180)} `;
         shapeEl = createSVGElem("polygon", { points: pts.trim() });
     } else if (shapeType === "arrowUp") {
-        // 丸の中に上矢印
         shapeEl = createSVGElem("g");
         shapeEl.appendChild(createSVGElem("circle", { cx: 0, cy: 0, r: size, fill: fillCol, stroke: strokeCol, "stroke-width": strokeW }));
         shapeEl.appendChild(createSVGElem("path", { d: `M0,${size*0.5} L0,-${size*0.5} M-${size*0.4},-0.1 L0,-${size*0.5} L${size*0.4},-0.1`, fill: "none", stroke: strokeCol, "stroke-width": Math.max(0.5, strokeW * 0.8), "stroke-linecap": "round", "stroke-linejoin": "round" }));
     } else if (shapeType === "arrowDown") {
-        // 丸の中に下矢印
         shapeEl = createSVGElem("g");
         shapeEl.appendChild(createSVGElem("circle", { cx: 0, cy: 0, r: size, fill: fillCol, stroke: strokeCol, "stroke-width": strokeW }));
         shapeEl.appendChild(createSVGElem("path", { d: `M0,-${size*0.5} L0,${size*0.5} M-${size*0.4},0.1 L0,${size*0.5} L${size*0.4},0.1`, fill: "none", stroke: strokeCol, "stroke-width": Math.max(0.5, strokeW * 0.8), "stroke-linecap": "round", "stroke-linejoin": "round" }));
@@ -124,6 +122,7 @@ function drawAstronomicalPins(cycleStartTime) {
     layer.innerHTML = "";
     if (concentricRings.length < 30) return;
 
+    // データが取得できない場合のエラー回避（フォールバック）
     const st = window.layerSettings.astroPins || window.defaultLayerSettings.astroPins;
     if(!st || st.opacity === 0) return;
 
@@ -197,7 +196,7 @@ function drawLunarMansions(cycleStartTimeMs) {
     if(layer) layer.innerHTML = "";
     if (concentricRings.length === 0) return;
 
-    const st = window.layerSettings.lunarMansion;
+    const st = window.layerSettings.lunarMansion || window.defaultLayerSettings.lunarMansion;
     const rBase = concentricRings[concentricRings.length - 1] + 60;
     const rMax = rBase + 30;
     const resolution = 2;
@@ -290,8 +289,8 @@ function drawDailyRainStats(startDate) {
     if(bgLayer) bgLayer.innerHTML = "";
     if(textLayer) textLayer.innerHTML = "";
 
-    const stBg = window.layerSettings.dailyRainBg;
-    const stText = window.layerSettings.dailyRainText;
+    const stBg = window.layerSettings.dailyRainBg || window.defaultLayerSettings.dailyRainBg;
+    const stText = window.layerSettings.dailyRainText || window.defaultLayerSettings.dailyRainText;
 
     const rMin = concentricRings[16];
     const rMax = concentricRings[22];
@@ -340,9 +339,9 @@ function drawTideGraph(cycleStartTimeMs) {
 
     if (!highLowTidePoints || highLowTidePoints.length === 0) return;
 
-    const stGraph = window.layerSettings.tideGraph;
-    const stLine = window.layerSettings.guideTideLine || window.layerSettings.guideTide;
-    const stText = window.layerSettings.guideTideText || window.layerSettings.guideTide;
+    const stGraph = window.layerSettings.tideGraph || window.defaultLayerSettings.tideGraph;
+    const stLine = window.layerSettings.guideTideLine || window.layerSettings.guideTide || window.defaultLayerSettings.guideTideLine;
+    const stText = window.layerSettings.guideTideText || window.layerSettings.guideTide || window.defaultLayerSettings.guideTideText;
 
     const rMin = concentricRings[16];
     const rMax = concentricRings[22];
@@ -425,7 +424,7 @@ function getApproxTideAtTime(targetTimeMs) {
     return p1.tide + (p2.tide - p1.tide) * ratio;
 }
 
-// ▼ 独立した月の出・月の入りピン描画（フォールバック付き完全版） ▼
+// ▼ 独立した月の出・月の入りピン描画（フォールバックとバグ修正を適用） ▼
 function drawMoonEventPins(cycleStartTimeMs) {
     const riseLayer = document.getElementById("layer-moon-rise");
     const setLayer = document.getElementById("layer-moon-set");
@@ -501,7 +500,6 @@ function drawSunEventPins(startDate) {
         }
         
         if (isPhaseDay) {
-            // 日本時間正午（UTC 3:00）を基準にその日の出没を計算
             const sunTimes = getTimes(new Date(loopDate.getTime() + 43200000), station.lat, station.lon);
 
             const drawPin = (timeDate, isRise) => {
@@ -539,9 +537,9 @@ function drawRainfallGraph(cycleStartTimeMs) {
     if(guideLayer) guideLayer.innerHTML = "";
     if (concentricRings.length < 23) return;
 
-    const stGraph = window.layerSettings.rainGraph;
-    const stLine = window.layerSettings.guideRainLine || window.layerSettings.guideRain;
-    const stText = window.layerSettings.guideRainText || window.layerSettings.guideRain;
+    const stGraph = window.layerSettings.rainGraph || window.defaultLayerSettings.rainGraph;
+    const stLine = window.layerSettings.guideRainLine || window.layerSettings.guideRain || window.defaultLayerSettings.guideRainLine;
+    const stText = window.layerSettings.guideRainText || window.layerSettings.guideRain || window.defaultLayerSettings.guideRainText;
 
     const rMin = concentricRings[16];
     const rMax = concentricRings[22];
@@ -581,7 +579,7 @@ function drawTimeLabels() {
     const timeLayer = document.getElementById("layer-guide-time");
     if(timeLayer) timeLayer.innerHTML = "";
     if (concentricRings.length < 20) return;
-    const st = window.layerSettings.guideTime;
+    const st = window.layerSettings.guideTime || window.defaultLayerSettings.guideTime;
     const rMidTime = (concentricRings[19] + concentricRings[20]) / 2 + st.offsetRadius;
     const timeStr = ["0", "6", "12", "18"];
     
@@ -597,7 +595,7 @@ function drawLunarShadow(cycleStartTime) {
     if(shadowLayer) shadowLayer.innerHTML = "";
     if (concentricRings.length < 30) return;
 
-    const st = window.layerSettings.lunarShadow; 
+    const st = window.layerSettings.lunarShadow || window.defaultLayerSettings.lunarShadow; 
     const rMin = concentricRings[0];
     const rMax = concentricRings[concentricRings.length - 2];
     const maxArea = rMax * rMax - rMin * rMin;
@@ -629,7 +627,7 @@ function drawLunarShadow(cycleStartTime) {
 function drawDynamicLines() {
     const linesLayer = document.getElementById("layer-lines");
     if(linesLayer) linesLayer.innerHTML = "";
-    const st = window.layerSettings.dateLines;
+    const st = window.layerSettings.dateLines || window.defaultLayerSettings.dateLines;
     const rMin = concentricRings[0];
     const rMax = concentricRings[concentricRings.length - 1];
 
@@ -713,12 +711,12 @@ function drawKoyomiEvents(startDate) {
     const R = concentricRings;
     if(R.length < 30) return;
 
-    const stG = window.layerSettings.gregorian;
-    const stW = window.layerSettings.weekday;
-    const stL = window.layerSettings.lunar;
-    const stZ = window.layerSettings.zassetsu;
-    const stH = window.layerSettings.holiday;
-    const stI = window.layerSettings.important;
+    const stG = window.layerSettings.gregorian || window.defaultLayerSettings.gregorian;
+    const stW = window.layerSettings.weekday || window.defaultLayerSettings.weekday;
+    const stL = window.layerSettings.lunar || window.defaultLayerSettings.lunar;
+    const stZ = window.layerSettings.zassetsu || window.defaultLayerSettings.zassetsu;
+    const stH = window.layerSettings.holiday || window.defaultLayerSettings.holiday;
+    const stI = window.layerSettings.important || window.defaultLayerSettings.important;
 
     const daysStr = stW.lang === 'ja' ? ["日", "月", "火", "水", "木", "金", "土"] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -781,10 +779,10 @@ function drawKoyomiEvents(startDate) {
             if (!cellData) return;
             cellData.split('・').forEach(item => { if (item.trim()) dailyEvents.push({ text: item.trim(), st: styleConfig }); });
         };
-        if (showShinto) pushEvents(dbRow[10], window.layerSettings.eventShinto);
-        if (showBuddhism) pushEvents(dbRow[11], window.layerSettings.eventBuddhism);
-        if (showChurch) pushEvents(dbRow[12], window.layerSettings.eventChurch);
-        if (showSonota) pushEvents(dbRow[13], window.layerSettings.eventSonota);
+        if (showShinto) pushEvents(dbRow[10], window.layerSettings.eventShinto || window.defaultLayerSettings.eventShinto);
+        if (showBuddhism) pushEvents(dbRow[11], window.layerSettings.eventBuddhism || window.defaultLayerSettings.eventBuddhism);
+        if (showChurch) pushEvents(dbRow[12], window.layerSettings.eventChurch || window.defaultLayerSettings.eventChurch);
+        if (showSonota) pushEvents(dbRow[13], window.layerSettings.eventSonota || window.defaultLayerSettings.eventSonota);
 
         let tracks = [[], [], [], [], [], []]; 
         if (dailyEvents.length > 0) {
@@ -883,12 +881,12 @@ function drawKoyomiEvents(startDate) {
             if(outerSeasonLayer) outerSeasonLayer.appendChild(createStyledText(stOut, { class: classStr, x: ptTextOut.x, y: ptTextOut.y, "dominant-baseline": "middle", "text-anchor": "start", transform: `rotate(${lineAngle}, ${ptTextOut.x}, ${ptTextOut.y})` }, eventName));
         };
 
-        if (dbRow[2]) drawOuterText(dbRow[2], true, "layer-sekki", window.layerSettings.sekki, 0);
-        if (dbRow[3]) drawOuterText(dbRow[3], false, "layer-kou", window.layerSettings.kou, dbRow[2] ? 1.5 : 0);
+        if (dbRow[2]) drawOuterText(dbRow[2], true, "layer-sekki", window.layerSettings.sekki || window.defaultLayerSettings.sekki, 0);
+        if (dbRow[3]) drawOuterText(dbRow[3], false, "layer-kou", window.layerSettings.kou || window.defaultLayerSettings.kou, dbRow[2] ? 1.5 : 0);
     }
 
-    const stWafu = window.layerSettings.wafuText;
-    const stGreText = window.layerSettings.gregorianText;
+    const stWafu = window.layerSettings.wafuText || window.defaultLayerSettings.wafuText;
+    const stGreText = window.layerSettings.gregorianText || window.defaultLayerSettings.gregorianText;
     const wafuTextLayer = document.getElementById("layer-wafu-text");
     if(wafuTextLayer) {
         wafuTextLayer.innerHTML = "";
@@ -909,7 +907,7 @@ function drawHaikus(startDate) {
     if(layer) layer.innerHTML = "";
     if (concentricRings.length === 0) return;
 
-    const st = window.layerSettings.haikuText;
+    const st = window.layerSettings.haikuText || window.defaultLayerSettings.haikuText;
     if (!st || st.opacity === 0) return;
 
     const rBase = concentricRings[concentricRings.length - 1] + 90 + st.offsetRadius;
