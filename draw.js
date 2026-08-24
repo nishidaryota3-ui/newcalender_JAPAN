@@ -1,4 +1,4 @@
-// draw.js (SVG描画モジュール) - 矢印アイコン追加＆確実なピン描画（安全装置付き）版
+// draw.js (SVG描画モジュール) - 完全修正版
 
 if (typeof window.mansions === 'undefined') {
     window.mansions = [
@@ -79,13 +79,19 @@ function drawPinShape(g, shapeType, size, st) {
     if (shapeType === "none") return;
     const fillCol = st.fill || "none";
     const strokeCol = st.stroke || "none";
-    
     const strokeW = st.strokeWidth !== undefined ? st.strokeWidth : 1.2;
-
     let shapeEl = null;
 
     if (shapeType === "circle") {
         shapeEl = createSVGElem("circle", { cx: 0, cy: 0, r: size });
+    } else if (shapeType === "halfRight") {
+        shapeEl = createSVGElem("g");
+        shapeEl.appendChild(createSVGElem("path", { d: `M 0,-${size} A ${size},${size} 0 0,1 0,${size} Z`, fill: fillCol, stroke: "none" }));
+        shapeEl.appendChild(createSVGElem("circle", { cx: 0, cy: 0, r: size, fill: "none", stroke: strokeCol, "stroke-width": strokeW }));
+    } else if (shapeType === "halfLeft") {
+        shapeEl = createSVGElem("g");
+        shapeEl.appendChild(createSVGElem("path", { d: `M 0,-${size} A ${size},${size} 0 0,0 0,${size} Z`, fill: fillCol, stroke: "none" }));
+        shapeEl.appendChild(createSVGElem("circle", { cx: 0, cy: 0, r: size, fill: "none", stroke: strokeCol, "stroke-width": strokeW }));
     } else if (shapeType === "rect") {
         shapeEl = createSVGElem("rect", { x: -size, y: -size, width: size*2, height: size*2, rx: size*0.2 });
     } else if (shapeType === "triangle") {
@@ -159,33 +165,19 @@ function drawAstronomicalPins(cycleStartTime) {
                     const exactI = i - 1 + fraction;
                     const angle = startAngle + exactI * 0.5;
                     
-                    // ▼ 念のためのNaNフィルター ▼
                     if (isNaN(angle)) continue;
 
                     const pt = polarToCartesian(cx, cy, rMin, angle);
                     const g = createSVGElem("g", { transform: `translate(${pt.x}, ${pt.y}) rotate(${angle})`, opacity: st.opacity });
-                    const R = 3.5 * (st.scale || 1); 
                     
-                    const shapeType = st.shape || "circle";
+                    const phaseKey = t.key === 'new' ? 'newMoon' : t.key === 'full' ? 'fullMoon' : t.key === 'first' ? 'firstQuarter' : 'lastQuarter';
+                    const pst = st.phases ? st.phases[phaseKey] : st;
+
+                    const R = 3.5 * (pst.scale || 1); 
+                    const shapeType = pst.shape || "circle";
+                    const drawSt = { fill: pst.fill, stroke: pst.shapeStroke !== undefined ? pst.shapeStroke : pst.stroke, strokeWidth: pst.shapeStrokeWidth !== undefined ? pst.shapeStrokeWidth : pst.strokeWidth };
                     
-                    if (shapeType !== "circle") {
-                         drawPinShape(g, shapeType, R, st);
-                    } else {
-                        const strokeW = st.strokeWidth !== undefined ? st.strokeWidth : 1.2;
-                        const circle = createSVGElem("circle", { cx: 0, cy: 0, r: R, fill: "none", stroke: st.stroke, "stroke-width": strokeW });
-                        if (t.key === 'new') {
-                            circle.setAttribute("fill", st.fill);
-                            g.appendChild(circle);
-                        } else if (t.key === 'full') {
-                            g.appendChild(circle);
-                        } else if (t.key === 'first') {
-                            g.appendChild(createSVGElem("path", { d: `M 0,-${R} A ${R},${R} 0 0,1 0,${R} Z`, fill: st.fill }));
-                            g.appendChild(circle);
-                        } else if (t.key === 'last') {
-                            g.appendChild(createSVGElem("path", { d: `M 0,-${R} A ${R},${R} 0 0,0 0,${R} Z`, fill: st.fill }));
-                            g.appendChild(circle);
-                        }
-                    }
+                    drawPinShape(g, shapeType, R, drawSt);
                     layer.appendChild(g);
                 }
             }
@@ -268,6 +260,7 @@ function drawConstellationMark(startAng, endAng, index, rCenter, st, color) {
     const starCount = Math.floor(rand() * 3) + 3;
     const starBaseSize = st.starSize !== undefined ? st.starSize : 1.5;
 
+    let stars = []; // ← 欠落していた箱を復活！これでバグは解消されます
     for(let i=0; i<starCount; i++) {
         const sAngle = midAngle + (rand() - 0.5) * 8;
         const pt = polarToCartesian(cx, cy, rCenter + (rand() - 0.5) * 15, sAngle);
@@ -427,7 +420,6 @@ function getApproxTideAtTime(targetTimeMs) {
     return p1.tide + (p2.tide - p1.tide) * ratio;
 }
 
-// ▼ 独立した月の出・月の入りピン描画（完全フィルター搭載版） ▼
 function drawMoonEventPins(cycleStartTimeMs) {
     const riseLayer = document.getElementById("layer-moon-rise");
     const setLayer = document.getElementById("layer-moon-set");
@@ -443,7 +435,7 @@ function drawMoonEventPins(cycleStartTimeMs) {
     const startAngle = currentStartSegment * 3;
 
     for (let i = 0; i < window.currentMonthDays; i++) {
-        const dayDate = new Date(cycleStartTimeMs + i * 86400000 + 43200000); // 12:00
+        const dayDate = new Date(cycleStartTimeMs + i * 86400000 + 43200000); 
         const moonTimes = getMoonTimes(dayDate, station.lat, station.lon);
 
         const drawPin = (timeDate, isRise) => {
@@ -452,22 +444,19 @@ function drawMoonEventPins(cycleStartTimeMs) {
             if (!timeDate || !st || st.opacity === 0 || !targetLayer) return;
 
             const timeMs = timeDate.getTime();
-            
-            // ▼ SVGクラッシュを100%防ぐための絶対的フィルター ▼
             if (isNaN(timeMs)) return;
-            
             if (timeMs < cycleStartTimeMs || timeMs > cycleStartTimeMs + window.currentMonthDays * 86400000) return;
 
             const hours = (timeMs - cycleStartTimeMs) / 3600000;
             const angle = startAngle + hours * 0.5;
             
-            if (isNaN(angle)) return; // 念のため
+            if (isNaN(angle)) return; 
 
             const tideVal = getApproxTideAtTime(timeMs);
             const r = window.getTideRadius(tideVal, rMin, rMax) + (st.radiusOffset || 0);
             const pt = polarToCartesian(cx, cy, r, angle);
 
-            if (isNaN(pt.x) || isNaN(pt.y)) return; // 念のため
+            if (isNaN(pt.x) || isNaN(pt.y)) return; 
 
             const size = 3 * (st.scale !== undefined ? st.scale : 1.5);
             const g = createSVGElem("g", { transform: `translate(${pt.x}, ${pt.y}) rotate(${angle})`, opacity: st.opacity });
@@ -481,7 +470,6 @@ function drawMoonEventPins(cycleStartTimeMs) {
     }
 }
 
-// ▼ 独立した日の出・日の入りピン描画（新月などの節目のみ・完全フィルター搭載版） ▼
 function drawSunEventPins(startDate) {
     const riseLayer = document.getElementById("layer-sun-rise");
     const setLayer = document.getElementById("layer-sun-set");
@@ -517,22 +505,19 @@ function drawSunEventPins(startDate) {
                 if (!timeDate || !st || st.opacity === 0 || !targetLayer) return;
 
                 const timeMs = timeDate.getTime();
-
-                // ▼ SVGクラッシュを100%防ぐための絶対的フィルター ▼
                 if (isNaN(timeMs)) return;
-
                 if (timeMs < cycleStartTimeMs || timeMs > cycleStartTimeMs + window.currentMonthDays * 86400000) return;
 
                 const hours = (timeMs - cycleStartTimeMs) / 3600000;
                 const angle = startAngle + hours * 0.5;
                 
-                if (isNaN(angle)) return; // 念のため
+                if (isNaN(angle)) return; 
 
                 const tideVal = getApproxTideAtTime(timeMs);
                 const r = window.getTideRadius(tideVal, rMin, rMax) + (st.radiusOffset || 0);
                 const pt = polarToCartesian(cx, cy, r, angle);
 
-                if (isNaN(pt.x) || isNaN(pt.y)) return; // 念のため
+                if (isNaN(pt.x) || isNaN(pt.y)) return; 
 
                 const size = 3 * (st.scale !== undefined ? st.scale : 1.5);
                 const g = createSVGElem("g", { transform: `translate(${pt.x}, ${pt.y}) rotate(${angle})`, opacity: st.opacity });
