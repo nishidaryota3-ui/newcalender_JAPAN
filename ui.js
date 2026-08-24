@@ -1,8 +1,7 @@
-// ui.js (UI構築・イベントモジュール) - 月の出没ピン・日の出没テキスト追加版
+// ui.js (UI構築・イベントモジュール) - 4つの出没ピン・矢印形状完全対応版
 
-// ▼ ここに新しく「moonEventPin」と「sunEventText」を追加しました ▼
-const TEXT_TARGETS = ['gregorian', 'weekday', 'sekki', 'kou', 'zassetsu', 'holiday', 'important', 'wafuText', 'gregorianText', 'dailyRainText', 'guideTime', 'guideTideText', 'guideRainText', 'lunarMansion', 'eventShinto', 'eventBuddhism', 'eventChurch', 'eventSonota', 'lunar', 'haikuText', 'sunEventText'];
-const SHAPE_TARGETS = ['baseSvg', 'lunarShadow', 'astroPins', 'dateLines', 'tideGraph', 'rainGraph', 'dailyRainBg', 'guideTideLine', 'guideRainLine', 'canvasBg', 'moonEventPin'];
+const TEXT_TARGETS = ['gregorian', 'weekday', 'sekki', 'kou', 'zassetsu', 'holiday', 'important', 'wafuText', 'gregorianText', 'dailyRainText', 'guideTime', 'guideTideText', 'guideRainText', 'lunarMansion', 'eventShinto', 'eventBuddhism', 'eventChurch', 'eventSonota', 'lunar', 'haikuText'];
+const SHAPE_TARGETS = ['baseSvg', 'lunarShadow', 'astroPins', 'dateLines', 'tideGraph', 'rainGraph', 'dailyRainBg', 'guideTideLine', 'guideRainLine', 'canvasBg', 'moonRisePin', 'moonSetPin', 'sunRisePin', 'sunSetPin'];
 
 const TARGET_NAMES = {
     canvasBg: "キャンバス背景", baseSvg: "ベース図形", lunarShadow: "月相シャドウ", astroPins: "天文学的ピン (朔望)", 
@@ -14,7 +13,8 @@ const TARGET_NAMES = {
     sekki: "24節気", kou: "72候", wafuText: "右上 月名 (旧暦)", gregorianText: "右上 月名 (新暦)", 
     holiday: "祝日 (上段)", zassetsu: "雑節 (中段)", important: "重要年中行事 (下段)", 
     eventShinto: "神事", eventBuddhism: "仏事", eventChurch: "教会行事", eventSonota: "その他", haikuText: "俳句 (一番外周)",
-    moonEventPin: "月の出・月の入り (ピン)", sunEventText: "日の出・日の入り (文字)" // 追加
+    // ▼ 4つに独立した出没ピン ▼
+    moonRisePin: "月の出 (ピン)", moonSetPin: "月の入 (ピン)", sunRisePin: "日の出 (ピン)", sunSetPin: "日の入 (ピン)" 
 };
 
 const LAYER_VISIBILITY_MAP = {
@@ -26,8 +26,7 @@ const LAYER_VISIBILITY_MAP = {
     "toggle-date-gregorian": ".layer-date-gregorian", "toggle-date-lunar": ".layer-date-lunar", "toggle-date-weekday": ".layer-date-weekday",
     "toggle-wafu-text": ".layer-wafu-text", "toggle-gregorian-text": ".layer-gregorian-text", "toggle-sekki": ".layer-sekki",
     "toggle-kou": ".layer-kou", "toggle-zassetsu": ".layer-zassetsu", "toggle-holiday": ".layer-holiday", "toggle-event-important": ".layer-event-important",
-    "toggle-moon-event-pin": "#layer-moon-event-pin", // 追加
-    "toggle-sun-event-text": ".layer-sun-event-text"  // 追加
+    "toggle-moon-rise": "#layer-moon-rise", "toggle-moon-set": "#layer-moon-set", "toggle-sun-rise": "#layer-sun-rise", "toggle-sun-set": "#layer-sun-set"
 };
 
 const iconExport = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
@@ -245,13 +244,17 @@ function initUI() {
                 <label style="display:flex; justify-content:space-between; align-items:center;">背景帯の透明度: <input type="range" id="dp-mansion-bg-opacity" min="0" max="1" step="0.05" style="width:100px; accent-color:#d4af37;"> <span id="dp-mansion-bg-opacity-val" style="width:30px; text-align:right;">0.05</span></label>
             </div>
             <div id="dp-group-shape" style="display:none; flex-direction:column; gap:12px; margin-top:5px; padding-top:10px; border-top:1px dashed rgba(255,255,255,0.2);">
-                <label id="dp-row-shape-type" style="display:flex; justify-content:space-between; align-items:center;">背景図形: 
-                    <select id="dp-shape" style="background:#222; color:#fff; border:1px solid #555; padding:4px; border-radius:4px; width:100px;">
+                <label id="dp-row-shape-type" style="display:flex; justify-content:space-between; align-items:center;">図形の形: 
+                    <select id="dp-shape" style="background:#222; color:#fff; border:1px solid #555; padding:4px; border-radius:4px; width:120px;">
                         <option value="none">なし</option>
-                        <option value="circle">丸</option>
-                        <option value="rect">四角</option>
-                        <option value="triangle">三角</option>
-                        <option value="star">星</option>
+                        <option value="circle">丸 (●)</option>
+                        <option value="rect">四角 (■)</option>
+                        <option value="triangle">三角 (▲)</option>
+                        <option value="rhombus">ひし形 (◆)</option>
+                        <option value="star">星 (★)</option>
+                        <!-- ▼ 新しい矢印アイコンの選択肢を追加 ▼ -->
+                        <option value="arrowUp">上矢印 (⇧)</option>
+                        <option value="arrowDown">下矢印 (⇩)</option>
                     </select>
                 </label>
                 <label id="dp-row-shape-scale" style="display:none; justify-content:space-between; align-items:center;">図形のサイズ (倍率): 
@@ -259,7 +262,7 @@ function initUI() {
                     <span id="dp-shape-scale-val" style="width:30px; text-align:right;">1</span>
                 </label>
                 <label id="dp-row-radius-offset" style="display:none; justify-content:space-between; align-items:center;">配置位置 (半径ズラし): 
-                    <input type="range" id="dp-radius-offset" min="0" max="800" step="5" style="width:100px; accent-color:#d4af37;">
+                    <input type="range" id="dp-radius-offset" min="-150" max="150" step="1" style="width:100px; accent-color:#d4af37;">
                     <span id="dp-radius-offset-val" style="width:30px; text-align:right;">0</span>
                 </label>
                 <label id="dp-row-density" style="display:none; justify-content:space-between; align-items:center;">グラデーション濃度: 
@@ -480,7 +483,10 @@ function initUI() {
                 }
             }
 
-            if (currentDesignTarget === 'astroPins' || currentDesignTarget === 'moonEventPin') {
+            if (['astroPins', 'moonRisePin', 'moonSetPin', 'sunRisePin', 'sunSetPin'].includes(currentDesignTarget)) {
+                document.getElementById('dp-row-shape-type').style.display = 'flex';
+                document.getElementById('dp-shape').value = st.shape || "circle";
+                
                 document.getElementById('dp-row-shape-scale').style.display = 'flex';
                 document.getElementById('dp-row-radius-offset').style.display = 'flex';
                 document.getElementById('dp-shape-scale').value = st.scale || 1;
@@ -561,7 +567,8 @@ function initUI() {
         if(SHAPE_TARGETS.includes(currentDesignTarget) && currentDesignTarget !== 'canvasBg') {
             if(st.fill !== undefined) st.fill = document.getElementById('dp-shape-fill-trans').checked ? "none" : document.getElementById('dp-shape-fill').value;
             
-            if (currentDesignTarget === 'astroPins' || currentDesignTarget === 'moonEventPin') {
+            if (['astroPins', 'moonRisePin', 'moonSetPin', 'sunRisePin', 'sunSetPin'].includes(currentDesignTarget)) {
+                st.shape = document.getElementById('dp-shape').value; // 形の保存
                 st.scale = parseFloat(document.getElementById('dp-shape-scale').value);
                 document.getElementById('dp-shape-scale-val').innerText = st.scale;
                 st.radiusOffset = parseFloat(document.getElementById('dp-radius-offset').value);
@@ -655,14 +662,14 @@ function initUI() {
             if (target === 'lunarShadow' && typeof drawLunarShadow === 'function') drawLunarShadow(window.lastCycleStartTimeMs);
             if (target === 'astroPins' && typeof drawAstronomicalPins === 'function') drawAstronomicalPins(window.lastCycleStartTimeMs);
             if (target === 'lunarMansion' && typeof drawLunarMansions === 'function') drawLunarMansions(window.lastCycleStartTimeMs);
-            if (target === 'moonEventPin' && typeof drawMoonEventPins === 'function') drawMoonEventPins(window.lastCycleStartTimeMs); 
+            if (['moonRisePin', 'moonSetPin'].includes(target) && typeof drawMoonEventPins === 'function') drawMoonEventPins(window.lastCycleStartTimeMs); 
         }
 
         if (window.lastKoyomiStartDate) {
             if (['dailyRainBg', 'dailyRainText'].includes(target) && typeof drawDailyRainStats === 'function') drawDailyRainStats(window.lastKoyomiStartDate);
             if (target === 'haikuText' && typeof drawHaikus === 'function') drawHaikus(window.lastKoyomiStartDate);
             if (['gregorian', 'weekday', 'sekki', 'kou', 'zassetsu', 'holiday', 'important', 'eventShinto', 'eventBuddhism', 'eventChurch', 'eventSonota', 'lunar', 'wafuText', 'gregorianText'].includes(target) && typeof drawKoyomiEvents === 'function') drawKoyomiEvents(window.lastKoyomiStartDate);
-            if (target === 'sunEventText' && typeof drawSunEventText === 'function') drawSunEventText(window.lastKoyomiStartDate); 
+            if (['sunRisePin', 'sunSetPin'].includes(target) && typeof drawSunEventPins === 'function') drawSunEventPins(window.lastKoyomiStartDate); 
         }
     };
 
