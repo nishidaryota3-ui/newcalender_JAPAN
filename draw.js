@@ -1,4 +1,4 @@
-// draw.js (SVG描画モジュール) - 矢印アイコン追加＆確実なピン描画版
+// draw.js (SVG描画モジュール) - 矢印アイコン追加＆確実なピン描画（安全装置付き）版
 
 if (typeof window.mansions === 'undefined') {
     window.mansions = [
@@ -75,13 +75,11 @@ function createStyledText(st, attrs = {}, text = null) {
     return createSVGElem("text", { ...getStyleAttrs(st), ...attrs }, text);
 }
 
-// ▼ 新規追加: 矢印などの複雑な図形をSVGで生成するための汎用関数 ▼
 function drawPinShape(g, shapeType, size, st) {
     if (shapeType === "none") return;
     const fillCol = st.fill || "none";
     const strokeCol = st.stroke || "none";
     
-    // データがない場合のフォールバック（初期値 1.2 を保証）
     const strokeW = st.strokeWidth !== undefined ? st.strokeWidth : 1.2;
 
     let shapeEl = null;
@@ -124,7 +122,6 @@ function drawAstronomicalPins(cycleStartTime) {
     layer.innerHTML = "";
     if (concentricRings.length < 30) return;
 
-    // フォールバック（初期設定の強制読み込み）をすべての描画に適用
     const st = window.layerSettings.astroPins || window.defaultLayerSettings.astroPins;
     if(!st || st.opacity === 0) return;
 
@@ -161,8 +158,11 @@ function drawAstronomicalPins(cycleStartTime) {
                 if (cross) {
                     const exactI = i - 1 + fraction;
                     const angle = startAngle + exactI * 0.5;
-                    const pt = polarToCartesian(cx, cy, rMin, angle);
                     
+                    // ▼ 念のためのNaNフィルター ▼
+                    if (isNaN(angle)) continue;
+
+                    const pt = polarToCartesian(cx, cy, rMin, angle);
                     const g = createSVGElem("g", { transform: `translate(${pt.x}, ${pt.y}) rotate(${angle})`, opacity: st.opacity });
                     const R = 3.5 * (st.scale || 1); 
                     
@@ -171,7 +171,6 @@ function drawAstronomicalPins(cycleStartTime) {
                     if (shapeType !== "circle") {
                          drawPinShape(g, shapeType, R, st);
                     } else {
-                        // 従来の特別処理
                         const strokeW = st.strokeWidth !== undefined ? st.strokeWidth : 1.2;
                         const circle = createSVGElem("circle", { cx: 0, cy: 0, r: R, fill: "none", stroke: st.stroke, "stroke-width": strokeW });
                         if (t.key === 'new') {
@@ -317,7 +316,7 @@ function drawDailyRainStats(startDate) {
             if(bgLayer) bgLayer.appendChild(createSVGElem("path", { d: d, fill: stBg.fill, opacity: computedOpacity }));
 
             const angleMid = startAngle + 6;
-            const ptText = polarToCartesian(cx, cy, layer23CenterR + stText.offsetRadius, angleMid);
+            const ptText = polarToCartesian(cx, cy, layer23CenterR + (stText.offsetRadius || 0), angleMid);
             
             const textGroup = createSVGElem("g", { transform: `rotate(${angleMid + 180}, ${ptText.x}, ${ptText.y})` });
             
@@ -413,7 +412,6 @@ function drawTideGraph(cycleStartTimeMs) {
     }
 }
 
-// 潮汐の近似値（波の高さ）を計算してピンを乗せるための汎用関数
 function getApproxTideAtTime(targetTimeMs) {
     if (!highLowTidePoints || highLowTidePoints.length === 0) return (window.currentTideScaleMax + window.currentTideScaleMin) / 2;
     let p1 = highLowTidePoints[0], p2 = highLowTidePoints[highLowTidePoints.length - 1];
@@ -429,7 +427,7 @@ function getApproxTideAtTime(targetTimeMs) {
     return p1.tide + (p2.tide - p1.tide) * ratio;
 }
 
-// ▼ 独立した月の出・月の入りピン描画（フォールバックとバグ修正を適用） ▼
+// ▼ 独立した月の出・月の入りピン描画（完全フィルター搭載版） ▼
 function drawMoonEventPins(cycleStartTimeMs) {
     const riseLayer = document.getElementById("layer-moon-rise");
     const setLayer = document.getElementById("layer-moon-set");
@@ -437,7 +435,6 @@ function drawMoonEventPins(cycleStartTimeMs) {
     if(setLayer) setLayer.innerHTML = "";
     if (concentricRings.length < 23) return;
     
-    // データがない場合に備えて初期設定を強制的に読み込む安全装置
     const stRise = window.layerSettings.moonRisePin || window.defaultLayerSettings.moonRisePin;
     const stSet = window.layerSettings.moonSetPin || window.defaultLayerSettings.moonSetPin;
 
@@ -455,14 +452,22 @@ function drawMoonEventPins(cycleStartTimeMs) {
             if (!timeDate || !st || st.opacity === 0 || !targetLayer) return;
 
             const timeMs = timeDate.getTime();
+            
+            // ▼ SVGクラッシュを100%防ぐための絶対的フィルター ▼
+            if (isNaN(timeMs)) return;
+            
             if (timeMs < cycleStartTimeMs || timeMs > cycleStartTimeMs + window.currentMonthDays * 86400000) return;
 
             const hours = (timeMs - cycleStartTimeMs) / 3600000;
             const angle = startAngle + hours * 0.5;
             
+            if (isNaN(angle)) return; // 念のため
+
             const tideVal = getApproxTideAtTime(timeMs);
             const r = window.getTideRadius(tideVal, rMin, rMax) + (st.radiusOffset || 0);
             const pt = polarToCartesian(cx, cy, r, angle);
+
+            if (isNaN(pt.x) || isNaN(pt.y)) return; // 念のため
 
             const size = 3 * (st.scale !== undefined ? st.scale : 1.5);
             const g = createSVGElem("g", { transform: `translate(${pt.x}, ${pt.y}) rotate(${angle})`, opacity: st.opacity });
@@ -476,7 +481,7 @@ function drawMoonEventPins(cycleStartTimeMs) {
     }
 }
 
-// ▼ 独立した日の出・日の入りピン描画（新月などの節目のみ・フォールバック付き） ▼
+// ▼ 独立した日の出・日の入りピン描画（新月などの節目のみ・完全フィルター搭載版） ▼
 function drawSunEventPins(startDate) {
     const riseLayer = document.getElementById("layer-sun-rise");
     const setLayer = document.getElementById("layer-sun-set");
@@ -484,7 +489,6 @@ function drawSunEventPins(startDate) {
     if(setLayer) setLayer.innerHTML = "";
     if (concentricRings.length < 23) return;
 
-    // データがない場合に備えて初期設定を強制的に読み込む安全装置
     const stRise = window.layerSettings.sunRisePin || window.defaultLayerSettings.sunRisePin;
     const stSet = window.layerSettings.sunSetPin || window.defaultLayerSettings.sunSetPin;
 
@@ -513,14 +517,22 @@ function drawSunEventPins(startDate) {
                 if (!timeDate || !st || st.opacity === 0 || !targetLayer) return;
 
                 const timeMs = timeDate.getTime();
+
+                // ▼ SVGクラッシュを100%防ぐための絶対的フィルター ▼
+                if (isNaN(timeMs)) return;
+
                 if (timeMs < cycleStartTimeMs || timeMs > cycleStartTimeMs + window.currentMonthDays * 86400000) return;
 
                 const hours = (timeMs - cycleStartTimeMs) / 3600000;
                 const angle = startAngle + hours * 0.5;
                 
+                if (isNaN(angle)) return; // 念のため
+
                 const tideVal = getApproxTideAtTime(timeMs);
                 const r = window.getTideRadius(tideVal, rMin, rMax) + (st.radiusOffset || 0);
                 const pt = polarToCartesian(cx, cy, r, angle);
+
+                if (isNaN(pt.x) || isNaN(pt.y)) return; // 念のため
 
                 const size = 3 * (st.scale !== undefined ? st.scale : 1.5);
                 const g = createSVGElem("g", { transform: `translate(${pt.x}, ${pt.y}) rotate(${angle})`, opacity: st.opacity });
@@ -533,6 +545,54 @@ function drawSunEventPins(startDate) {
             drawPin(sunTimes.sunset, false);
         }
     }
+}
+
+function drawRainfallGraph(cycleStartTimeMs) {
+    const rainLayer = document.getElementById("layer-rain-graph");
+    const guideLayer = document.getElementById("layer-guide-rain");
+    if(rainLayer) rainLayer.innerHTML = "";
+    if(guideLayer) guideLayer.innerHTML = "";
+    if (concentricRings.length < 23) return;
+
+    const stGraph = window.layerSettings.rainGraph || window.defaultLayerSettings.rainGraph;
+    const stLine = window.layerSettings.guideRainLine || window.layerSettings.guideRain || window.defaultLayerSettings.guideRainLine;
+    const stText = window.layerSettings.guideRainText || window.layerSettings.guideRain || window.defaultLayerSettings.guideRainText;
+
+    const rMin = concentricRings[16];
+    const rMax = concentricRings[22];
+    const maxRain = 30;
+    const rainGroup = createSVGElem("g");
+
+    const strokeW = stLine.strokeWidth !== undefined ? stLine.strokeWidth : 1;
+    if(guideLayer) guideLayer.appendChild(createSVGElem("circle", { class: "layer-guide-rain-line", cx: cx, cy: cy, r: rMax, fill: "none", stroke: stLine.stroke, "stroke-width": strokeW, opacity: stLine.opacity }));
+
+    const startAngle = currentStartSegment * 3;
+    const graphStrokeW = stGraph.strokeWidth !== undefined ? stGraph.strokeWidth : 1.5;
+    
+    for (let h = 0; h < window.currentMonthDays * 24; h++) {
+        let rain = apiRainData[h];
+        if(rain === null || isNaN(rain) || rain <= 0) continue;
+        const r = rMax - (rMax - rMin) * (rain / maxRain);
+        const angle = startAngle + h * 0.5 + 0.25;
+        const p1 = polarToCartesian(cx, cy, rMax, angle);
+        const p2 = polarToCartesian(cx, cy, r, angle);
+        rainGroup.appendChild(createSVGElem("line", { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, stroke: stGraph.stroke, "stroke-width": graphStrokeW, "stroke-linecap": "round", opacity: stGraph.opacity }));
+    }
+
+    [{ relAngle: 96 }, { relAngle: 288 }].forEach(target => {
+        const labelAngle = startAngle + target.relAngle;
+        [5, 10, 15, 20, 25, 30].forEach(val => {
+            const r = rMax - (rMax - rMin) * (val / maxRain);
+            const p1 = polarToCartesian(cx, cy, r - 3, labelAngle);
+            const p2 = polarToCartesian(cx, cy, r + 3, labelAngle);
+            if(guideLayer) guideLayer.appendChild(createSVGElem("line", { class: "layer-guide-rain-line", x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, stroke: stLine.stroke, "stroke-width": strokeW, opacity: stLine.opacity }));
+            
+            const ptLabel = polarToCartesian(cx, cy, r + (stText.offsetRadius || 0), labelAngle);
+            if(guideLayer) guideLayer.appendChild(createStyledText(stText, { class: "layer-guide-rain-text", x: ptLabel.x, y: ptLabel.y, "text-anchor": "middle", "dominant-baseline": "central", transform: `rotate(${labelAngle + 180}, ${ptLabel.x}, ${ptLabel.y})` }, val + "mm"));
+        });
+    });
+
+    if(rainLayer) rainLayer.appendChild(rainGroup);
 }
 
 function drawTimeLabels() {
