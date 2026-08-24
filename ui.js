@@ -1,4 +1,4 @@
-// ui.js (UI構築・イベントモジュール) - 4つの出没ピン・矢印形状完全対応・役割分担徹底版
+// ui.js (UI構築・イベントモジュール) - 4つの出没ピン・矢印形状完全対応版
 
 const TEXT_TARGETS = ['gregorian', 'weekday', 'sekki', 'kou', 'zassetsu', 'holiday', 'important', 'wafuText', 'gregorianText', 'dailyRainText', 'guideTime', 'guideTideText', 'guideRainText', 'lunarMansion', 'eventShinto', 'eventBuddhism', 'eventChurch', 'eventSonota', 'lunar', 'haikuText'];
 const SHAPE_TARGETS = ['baseSvg', 'lunarShadow', 'astroPins', 'dateLines', 'tideGraph', 'rainGraph', 'dailyRainBg', 'guideTideLine', 'guideRainLine', 'canvasBg', 'moonRisePin', 'moonSetPin', 'sunRisePin', 'sunSetPin'];
@@ -13,7 +13,6 @@ const TARGET_NAMES = {
     sekki: "24節気", kou: "72候", wafuText: "右上 月名 (旧暦)", gregorianText: "右上 月名 (新暦)", 
     holiday: "祝日 (上段)", zassetsu: "雑節 (中段)", important: "重要年中行事 (下段)", 
     eventShinto: "神事", eventBuddhism: "仏事", eventChurch: "教会行事", eventSonota: "その他", haikuText: "俳句 (一番外周)",
-    // 独立した出没ピンの名称定義
     moonRisePin: "月の出 (ピン)", moonSetPin: "月の入 (ピン)", sunRisePin: "日の出 (ピン)", sunSetPin: "日の入 (ピン)" 
 };
 
@@ -26,7 +25,6 @@ const LAYER_VISIBILITY_MAP = {
     "toggle-date-gregorian": ".layer-date-gregorian", "toggle-date-lunar": ".layer-date-lunar", "toggle-date-weekday": ".layer-date-weekday",
     "toggle-wafu-text": ".layer-wafu-text", "toggle-gregorian-text": ".layer-gregorian-text", "toggle-sekki": ".layer-sekki",
     "toggle-kou": ".layer-kou", "toggle-zassetsu": ".layer-zassetsu", "toggle-holiday": ".layer-holiday", "toggle-event-important": ".layer-event-important",
-    // 独立した出没ピンのIDマッピング
     "toggle-moon-rise": "#layer-moon-rise", "toggle-moon-set": "#layer-moon-set", "toggle-sun-rise": "#layer-sun-rise", "toggle-sun-set": "#layer-sun-set"
 };
 
@@ -179,7 +177,7 @@ function initUI() {
     designPanel.className = 'panel-ui';
     designPanel.style = "display:none; position:fixed; top:100px; left:50%; background:rgba(25,30,40,0.95); padding:0 20px 20px 20px; border-radius:12px; border:1px solid rgba(212,175,55,0.5); color:#fff; z-index:200; box-shadow:0 10px 40px rgba(0,0,0,0.8); min-width:320px; backdrop-filter:blur(10px);";
     
-    // ▼ ここに新しく「arrowUp」「arrowDown」「rhombus」を含めた図形選択を追加しています ▼
+    // ▼ ここに「ひし形」「上矢印」「下矢印」などの選択肢を明記したHTMLを登録しています ▼
     designPanel.innerHTML = `
         <div id="dp-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid rgba(212,175,55,0.3); padding:12px 0 10px 0; cursor:grab; user-select:none;">
             <div id="dp-title" style="color:#d4af37; font-weight:bold; font-size:15px;">デザイン設定</div>
@@ -388,6 +386,7 @@ function initUI() {
     let currentDesignTarget = null;
     
     const loadPanelData = () => {
+        // 設定データが取得できない場合はデフォルト値を強制使用（フェイルセーフ）
         const st = window.layerSettings[currentDesignTarget] || window.defaultLayerSettings[currentDesignTarget];
         if (!st) return;
 
@@ -441,11 +440,7 @@ function initUI() {
             document.getElementById('dp-mansion-star-size-val').innerText = st.starSize !== undefined ? st.starSize : 1.5;
             document.getElementById('dp-mansion-bg-color').value = st.bgRingColor || "#ffffff";
             document.getElementById('dp-mansion-bg-opacity').value = st.bgRingOpacity !== undefined ? st.bgRingOpacity : 0.05;
-            document.getElementById('dp-mansion-bg-opacity-val').innerText = st.bgRingOpacity !== undefined ? st.bgRingOpacity : 0.05;
-
-            document.getElementById('dp-row-color').style.display = 'none';
-            document.getElementById('dp-row-stroke-color').style.display = 'none';
-            document.getElementById('dp-row-stroke-width').style.display = 'none';
+            document.getElementById('dp-mansion-bg-opacity-val').innerText = st.bgRingOpacity;
         }
 
         if (currentDesignTarget === 'canvasBg') {
@@ -479,8 +474,9 @@ function initUI() {
                     document.getElementById('dp-shape-stroke').value = st.stroke || "#000000";
                 } else {
                     document.getElementById('dp-shape-stroke').value = st.stroke || "#000000";
-                    document.getElementById('dp-shape-stroke-width').value = st.strokeWidth || 0;
-                    document.getElementById('dp-shape-stroke-width-val').innerText = st.strokeWidth || 0;
+                    // 確実に線の太さを表示
+                    document.getElementById('dp-shape-stroke-width').value = st.strokeWidth !== undefined ? st.strokeWidth : 0;
+                    document.getElementById('dp-shape-stroke-width-val').innerText = st.strokeWidth !== undefined ? st.strokeWidth : 0;
                 }
             }
 
@@ -490,10 +486,10 @@ function initUI() {
                 
                 document.getElementById('dp-row-shape-scale').style.display = 'flex';
                 document.getElementById('dp-row-radius-offset').style.display = 'flex';
-                document.getElementById('dp-shape-scale').value = st.scale || 1;
-                document.getElementById('dp-shape-scale-val').innerText = st.scale || 1;
-                document.getElementById('dp-radius-offset').value = st.radiusOffset || 0;
-                document.getElementById('dp-radius-offset-val').innerText = st.radiusOffset || 0;
+                document.getElementById('dp-shape-scale').value = st.scale !== undefined ? st.scale : 1;
+                document.getElementById('dp-shape-scale-val').innerText = st.scale !== undefined ? st.scale : 1;
+                document.getElementById('dp-radius-offset').value = st.radiusOffset !== undefined ? st.radiusOffset : 0;
+                document.getElementById('dp-radius-offset-val').innerText = st.radiusOffset !== undefined ? st.radiusOffset : 0;
             }
         }
 
