@@ -80,7 +80,9 @@ function drawPinShape(g, shapeType, size, st) {
     if (shapeType === "none") return;
     const fillCol = st.fill || "none";
     const strokeCol = st.stroke || "none";
-    const strokeW = st.strokeWidth || 0;
+    
+    // データがない場合のフォールバック（初期値 1.2 を保証）
+    const strokeW = st.strokeWidth !== undefined ? st.strokeWidth : 1.2;
 
     let shapeEl = null;
 
@@ -122,7 +124,7 @@ function drawAstronomicalPins(cycleStartTime) {
     layer.innerHTML = "";
     if (concentricRings.length < 30) return;
 
-    // データが取得できない場合のエラー回避（フォールバック）
+    // フォールバック（初期設定の強制読み込み）をすべての描画に適用
     const st = window.layerSettings.astroPins || window.defaultLayerSettings.astroPins;
     if(!st || st.opacity === 0) return;
 
@@ -169,7 +171,9 @@ function drawAstronomicalPins(cycleStartTime) {
                     if (shapeType !== "circle") {
                          drawPinShape(g, shapeType, R, st);
                     } else {
-                        const circle = createSVGElem("circle", { cx: 0, cy: 0, r: R, fill: "none", stroke: st.stroke, "stroke-width": st.strokeWidth });
+                        // 従来の特別処理
+                        const strokeW = st.strokeWidth !== undefined ? st.strokeWidth : 1.2;
+                        const circle = createSVGElem("circle", { cx: 0, cy: 0, r: R, fill: "none", stroke: st.stroke, "stroke-width": strokeW });
                         if (t.key === 'new') {
                             circle.setAttribute("fill", st.fill);
                             g.appendChild(circle);
@@ -235,7 +239,7 @@ function drawLunarMansions(cycleStartTimeMs) {
             const p2 = polarToCartesian(cx, cy, rMax, angle);
             const line = createSVGElem("line", {
                 x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y,
-                stroke: getMansionColor(index), "stroke-width": st.strokeWidth, opacity: st.opacity
+                stroke: getMansionColor(index), "stroke-width": st.strokeWidth !== undefined ? st.strokeWidth : 0.5, opacity: st.opacity
             });
             if(layer) layer.appendChild(line);
 
@@ -263,7 +267,6 @@ function drawConstellationMark(startAng, endAng, index, rCenter, st, color) {
     let seed = index * 12345;
     const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
     const starCount = Math.floor(rand() * 3) + 3;
-    const stars = [];
     const starBaseSize = st.starSize !== undefined ? st.starSize : 1.5;
 
     for(let i=0; i<starCount; i++) {
@@ -391,18 +394,20 @@ function drawTideGraph(cycleStartTimeMs) {
             pathD += `Q ${p1.x},${p1.y} ${midX},${midY} `;
             if (i === points.length - 2) pathD += `L ${p2.x},${p2.y} `;
         }
-        if(waveLayer) waveLayer.appendChild(createSVGElem("path", { d: pathD, fill: "none", stroke: stGraph.stroke, "stroke-width": stGraph.strokeWidth, opacity: stGraph.opacity, "stroke-linecap": "round", "stroke-linejoin": "round" }));
+        const strokeW = stGraph.strokeWidth !== undefined ? stGraph.strokeWidth : 1.5;
+        if(waveLayer) waveLayer.appendChild(createSVGElem("path", { d: pathD, fill: "none", stroke: stGraph.stroke, "stroke-width": strokeW, opacity: stGraph.opacity, "stroke-linecap": "round", "stroke-linejoin": "round" }));
     }
 
     for (let i = 0; i <= 6; i++) {
         const val = window.currentTideScaleMin + i * step; 
         const r = rMin + (i / 6) * (rMax - rMin);
 
-        if(guideLayer) guideLayer.appendChild(createSVGElem("circle", { class: "layer-guide-tide-line", cx: cx, cy: cy, r: r, fill: "none", stroke: stLine.stroke, "stroke-width": stLine.strokeWidth, "stroke-dasharray": "4,4", opacity: stLine.opacity }));
+        const strokeW = stLine.strokeWidth !== undefined ? stLine.strokeWidth : 0.5;
+        if(guideLayer) guideLayer.appendChild(createSVGElem("circle", { class: "layer-guide-tide-line", cx: cx, cy: cy, r: r, fill: "none", stroke: stLine.stroke, "stroke-width": strokeW, "stroke-dasharray": "4,4", opacity: stLine.opacity }));
 
         for(let j = 0; j < 6; j++) {
             const labelAngle = currentStartSegment * 3 + (j * 60);
-            const labelPt = polarToCartesian(cx, cy, r + stText.offsetRadius, labelAngle);
+            const labelPt = polarToCartesian(cx, cy, r + (stText.offsetRadius || 0), labelAngle);
             if(guideLayer) guideLayer.appendChild(createStyledText(stText, { class: "layer-guide-tide-text", x: labelPt.x, y: labelPt.y, "text-anchor": "middle", "dominant-baseline": "central", transform: `rotate(${labelAngle}, ${labelPt.x}, ${labelPt.y})` }, val + ""));
         }
     }
@@ -459,10 +464,10 @@ function drawMoonEventPins(cycleStartTimeMs) {
             const r = window.getTideRadius(tideVal, rMin, rMax) + (st.radiusOffset || 0);
             const pt = polarToCartesian(cx, cy, r, angle);
 
-            const size = 3 * (st.scale || 1);
+            const size = 3 * (st.scale !== undefined ? st.scale : 1.5);
             const g = createSVGElem("g", { transform: `translate(${pt.x}, ${pt.y}) rotate(${angle})`, opacity: st.opacity });
             
-            drawPinShape(g, st.shape || "circle", size, st);
+            drawPinShape(g, st.shape || (isRise ? "arrowUp" : "arrowDown"), size, st);
             targetLayer.appendChild(g);
         };
 
@@ -517,10 +522,10 @@ function drawSunEventPins(startDate) {
                 const r = window.getTideRadius(tideVal, rMin, rMax) + (st.radiusOffset || 0);
                 const pt = polarToCartesian(cx, cy, r, angle);
 
-                const size = 3 * (st.scale || 1);
+                const size = 3 * (st.scale !== undefined ? st.scale : 1.5);
                 const g = createSVGElem("g", { transform: `translate(${pt.x}, ${pt.y}) rotate(${angle})`, opacity: st.opacity });
                 
-                drawPinShape(g, st.shape || "circle", size, st);
+                drawPinShape(g, st.shape || (isRise ? "arrowUp" : "arrowDown"), size, st);
                 targetLayer.appendChild(g);
             };
 
@@ -530,57 +535,12 @@ function drawSunEventPins(startDate) {
     }
 }
 
-function drawRainfallGraph(cycleStartTimeMs) {
-    const rainLayer = document.getElementById("layer-rain-graph");
-    const guideLayer = document.getElementById("layer-guide-rain");
-    if(rainLayer) rainLayer.innerHTML = "";
-    if(guideLayer) guideLayer.innerHTML = "";
-    if (concentricRings.length < 23) return;
-
-    const stGraph = window.layerSettings.rainGraph || window.defaultLayerSettings.rainGraph;
-    const stLine = window.layerSettings.guideRainLine || window.layerSettings.guideRain || window.defaultLayerSettings.guideRainLine;
-    const stText = window.layerSettings.guideRainText || window.layerSettings.guideRain || window.defaultLayerSettings.guideRainText;
-
-    const rMin = concentricRings[16];
-    const rMax = concentricRings[22];
-    const maxRain = 30;
-    const rainGroup = createSVGElem("g");
-
-    if(guideLayer) guideLayer.appendChild(createSVGElem("circle", { class: "layer-guide-rain-line", cx: cx, cy: cy, r: rMax, fill: "none", stroke: stLine.stroke, "stroke-width": stLine.strokeWidth, opacity: stLine.opacity }));
-
-    const startAngle = currentStartSegment * 3;
-    for (let h = 0; h < window.currentMonthDays * 24; h++) {
-        let rain = apiRainData[h];
-        if(rain === null || isNaN(rain) || rain <= 0) continue;
-        const r = rMax - (rMax - rMin) * (rain / maxRain);
-        const angle = startAngle + h * 0.5 + 0.25;
-        const p1 = polarToCartesian(cx, cy, rMax, angle);
-        const p2 = polarToCartesian(cx, cy, r, angle);
-        rainGroup.appendChild(createSVGElem("line", { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, stroke: stGraph.stroke, "stroke-width": stGraph.strokeWidth, "stroke-linecap": "round", opacity: stGraph.opacity }));
-    }
-
-    [{ relAngle: 96 }, { relAngle: 288 }].forEach(target => {
-        const labelAngle = startAngle + target.relAngle;
-        [5, 10, 15, 20, 25, 30].forEach(val => {
-            const r = rMax - (rMax - rMin) * (val / maxRain);
-            const p1 = polarToCartesian(cx, cy, r - 3, labelAngle);
-            const p2 = polarToCartesian(cx, cy, r + 3, labelAngle);
-            if(guideLayer) guideLayer.appendChild(createSVGElem("line", { class: "layer-guide-rain-line", x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, stroke: stLine.stroke, "stroke-width": stLine.strokeWidth, opacity: stLine.opacity }));
-            
-            const ptLabel = polarToCartesian(cx, cy, r + stText.offsetRadius, labelAngle);
-            if(guideLayer) guideLayer.appendChild(createStyledText(stText, { class: "layer-guide-rain-text", x: ptLabel.x, y: ptLabel.y, "text-anchor": "middle", "dominant-baseline": "central", transform: `rotate(${labelAngle + 180}, ${ptLabel.x}, ${ptLabel.y})` }, val + "mm"));
-        });
-    });
-
-    if(rainLayer) rainLayer.appendChild(rainGroup);
-}
-
 function drawTimeLabels() {
     const timeLayer = document.getElementById("layer-guide-time");
     if(timeLayer) timeLayer.innerHTML = "";
     if (concentricRings.length < 20) return;
     const st = window.layerSettings.guideTime || window.defaultLayerSettings.guideTime;
-    const rMidTime = (concentricRings[19] + concentricRings[20]) / 2 + st.offsetRadius;
+    const rMidTime = (concentricRings[19] + concentricRings[20]) / 2 + (st.offsetRadius || 0);
     const timeStr = ["0", "6", "12", "18"];
     
     for (let i = 0; i < 120; i++) { 
@@ -631,13 +591,14 @@ function drawDynamicLines() {
     const rMin = concentricRings[0];
     const rMax = concentricRings[concentricRings.length - 1];
 
-    if(linesLayer) linesLayer.appendChild(createSVGElem("circle", { cx: cx, cy: cy, r: concentricRings[concentricRings.length - 2], fill: "none", stroke: st.stroke, "stroke-width": st.strokeWidth, opacity: st.opacity }));
+    const strokeW = st.strokeWidth !== undefined ? st.strokeWidth : 1.5;
+    if(linesLayer) linesLayer.appendChild(createSVGElem("circle", { cx: cx, cy: cy, r: concentricRings[concentricRings.length - 2], fill: "none", stroke: st.stroke, "stroke-width": strokeW, opacity: st.opacity }));
 
     for (let i = 0; i < 30; i++) { 
         const angle = ((currentStartSegment + i * 4) % 120) * 3;
         const ptInner = polarToCartesian(cx, cy, rMin, angle);
         const ptOuter = polarToCartesian(cx, cy, rMax, angle);
-        if(linesLayer) linesLayer.appendChild(createSVGElem("line", { x1: ptInner.x, y1: ptInner.y, x2: ptOuter.x, y2: ptOuter.y, stroke: st.stroke, "stroke-width": st.strokeWidth, opacity: st.opacity }));
+        if(linesLayer) linesLayer.appendChild(createSVGElem("line", { x1: ptInner.x, y1: ptInner.y, x2: ptOuter.x, y2: ptOuter.y, stroke: st.stroke, "stroke-width": strokeW, opacity: st.opacity }));
     }
 }
 
@@ -752,9 +713,9 @@ function drawKoyomiEvents(startDate) {
         createArc(`${arcIdBase}_24`, r24, angStart, angEnd); createArc(`${arcIdBase}_25`, r25, angStart, angEnd);
         createArc(`${arcIdBase}_26`, r26, angStart, angEnd); createArc(`${arcIdBase}_27`, r27, angStart, angEnd);
         createArc(`${arcIdBase}_28`, r28, angStart, angEnd); createArc(`${arcIdBase}_29`, r29, angStart, angEnd);
-        createArc(`${arcIdBase}_30U_text`, r30U_text + stH.offsetRadius, angStart, angEnd);
-        createArc(`${arcIdBase}_30M_text`, r30M_text + stZ.offsetRadius, angStart, angEnd);
-        createArc(`${arcIdBase}_30L_text`, r30L_text + stI.offsetRadius, angStart, angEnd);
+        createArc(`${arcIdBase}_30U_text`, r30U_text + (stH.offsetRadius || 0), angStart, angEnd);
+        createArc(`${arcIdBase}_30M_text`, r30M_text + (stZ.offsetRadius || 0), angStart, angEnd);
+        createArc(`${arcIdBase}_30L_text`, r30L_text + (stI.offsetRadius || 0), angStart, angEnd);
 
         const drawSingleText = (pathId, textContent, styleConfig, rVal, targetGroup) => {
             if (!textContent) return;
@@ -770,9 +731,9 @@ function drawKoyomiEvents(startDate) {
         };
 
         const holidayText = [dbRow[8], dbRow[14]].filter(Boolean).join(' ／ ');
-        drawSingleText(`${arcIdBase}_30U_text`, holidayText, stH, r30U_text + stH.offsetRadius, holidayGroup);
-        drawSingleText(`${arcIdBase}_30M_text`, dbRow[7], stZ, r30M_text + stZ.offsetRadius, zassetsuGroup);
-        drawSingleText(`${arcIdBase}_30L_text`, dbRow[9], stI, r30L_text + stI.offsetRadius, importantGroup);
+        drawSingleText(`${arcIdBase}_30U_text`, holidayText, stH, r30U_text + (stH.offsetRadius || 0), holidayGroup);
+        drawSingleText(`${arcIdBase}_30M_text`, dbRow[7], stZ, r30M_text + (stZ.offsetRadius || 0), zassetsuGroup);
+        drawSingleText(`${arcIdBase}_30L_text`, dbRow[9], stI, r30L_text + (stI.offsetRadius || 0), importantGroup);
 
         let dailyEvents = [];
         const pushEvents = (cellData, styleConfig) => {
@@ -817,10 +778,10 @@ function drawKoyomiEvents(startDate) {
             eventMixGroup.appendChild(textObj);
         });
 
-        const ptDate = polarToCartesian(cx, cy, r30Upper + stG.offsetRadius, baseAngle + 1.5);
+        const ptDate = polarToCartesian(cx, cy, r30Upper + (stG.offsetRadius || 0), baseAngle + 1.5);
         gregorianGroup.appendChild(createStyledText(stG, { class: "layer-date-gregorian", x: ptDate.x, y: ptDate.y, "text-anchor": "middle", "dominant-baseline": "central", transform: `rotate(${baseAngle + 1.5}, ${ptDate.x}, ${ptDate.y})` }, `${loopDate.getMonth() + 1}/${loopDate.getDate()}`));
 
-        const ptDay = polarToCartesian(cx, cy, r30Lower + stW.offsetRadius, baseAngle + 1.5);
+        const ptDay = polarToCartesian(cx, cy, r30Lower + (stW.offsetRadius || 0), baseAngle + 1.5);
         weekdayGroup.appendChild(createStyledText(stW, { class: "layer-date-weekday", x: ptDay.x, y: ptDay.y, "text-anchor": "middle", "dominant-baseline": "central", transform: `rotate(${baseAngle + 1.5}, ${ptDay.x}, ${ptDay.y})` }, daysStr[loopDate.getDay()]));
 
         if (dbRow[1]) {
@@ -833,7 +794,7 @@ function drawKoyomiEvents(startDate) {
             else if (rawLunarDay === "二十三") phaseKey = "lastQuarter";
 
             const pst = stL.phases[phaseKey];
-            const ptLunar = polarToCartesian(cx, cy, (r30In + r30Out)/2 + stL.offsetRadius, baseAngle + 10.5);
+            const ptLunar = polarToCartesian(cx, cy, (r30In + r30Out)/2 + (stL.offsetRadius || 0), baseAngle + 10.5);
             const lunarRadius = ((r30Out - r30In) * 0.4) * (pst.scale || 1);
 
             if (pst.shape !== "none") {
@@ -858,7 +819,8 @@ function drawKoyomiEvents(startDate) {
                 if (shapeEl) {
                     shapeEl.setAttribute("fill", pst.bgFill);
                     shapeEl.setAttribute("opacity", stL.opacity);
-                    if (pst.shapeStrokeWidth > 0) { shapeEl.setAttribute("stroke", pst.shapeStroke); shapeEl.setAttribute("stroke-width", pst.shapeStrokeWidth); }
+                    const strokeW = pst.shapeStrokeWidth !== undefined ? pst.shapeStrokeWidth : 0;
+                    if (strokeW > 0) { shapeEl.setAttribute("stroke", pst.shapeStroke); shapeEl.setAttribute("stroke-width", strokeW); }
                     shapeG.appendChild(shapeEl);
                     lunarGroup.appendChild(shapeG);
                 }
@@ -875,9 +837,10 @@ function drawKoyomiEvents(startDate) {
             const lineAngle = baseAngle + angleOffset;
             const p1 = polarToCartesian(cx, cy, r30Out, lineAngle);
             const p2 = polarToCartesian(cx, cy, r30Out + (isSekki ? 12 : 8), lineAngle);
-            if(outerSeasonLayer) outerSeasonLayer.appendChild(createSVGElem("line", { class: classStr, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, stroke: "#2c3e50", "stroke-width": isSekki ? "1.5" : "0.5" }));
+            const strokeW = isSekki ? "1.5" : "0.5";
+            if(outerSeasonLayer) outerSeasonLayer.appendChild(createSVGElem("line", { class: classStr, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, stroke: "#2c3e50", "stroke-width": strokeW }));
 
-            const ptTextOut = polarToCartesian(cx, cy, r30Out + (isSekki ? 45 : 20) + stOut.offsetRadius, lineAngle);
+            const ptTextOut = polarToCartesian(cx, cy, r30Out + (isSekki ? 45 : 20) + (stOut.offsetRadius || 0), lineAngle);
             if(outerSeasonLayer) outerSeasonLayer.appendChild(createStyledText(stOut, { class: classStr, x: ptTextOut.x, y: ptTextOut.y, "dominant-baseline": "middle", "text-anchor": "start", transform: `rotate(${lineAngle}, ${ptTextOut.x}, ${ptTextOut.y})` }, eventName));
         };
 
@@ -894,11 +857,11 @@ function drawKoyomiEvents(startDate) {
         const shiftX = (stWafu.fontSize || 70) * 5;
         const baseX = cx + 860 + shiftX;
         
-        wafuTextLayer.appendChild(createStyledText(stWafu, { class: "layer-wafu-text", x: baseX, y: cy - 850 + stWafu.offsetRadius, "text-anchor": "end", transform: `rotate(${-globalRotation}, ${cx}, ${cy})` }, startWafu ? `${startWafu}（旧暦）` : "旧暦取得中"));
+        wafuTextLayer.appendChild(createStyledText(stWafu, { class: "layer-wafu-text", x: baseX, y: cy - 850 + (stWafu.offsetRadius || 0), "text-anchor": "end", transform: `rotate(${-globalRotation}, ${cx}, ${cy})` }, startWafu ? `${startWafu}（旧暦）` : "旧暦取得中"));
         
         const wafuList = ['睦月','如月','弥生','卯月','皐月','水無月','文月','葉月','長月','神無月','霜月','師走'];
         const newWafuStr = startGregorianMonth === endGregorianMonth ? wafuList[startGregorianMonth - 1] : `${wafuList[startGregorianMonth - 1]} ／ ${wafuList[endGregorianMonth - 1]}`;
-        wafuTextLayer.appendChild(createStyledText(stGreText, { class: "layer-gregorian-text", x: baseX, y: cy - 850 + (stWafu.fontSize * 0.9) + stGreText.offsetRadius, "text-anchor": "end", transform: `rotate(${-globalRotation}, ${cx}, ${cy})` }, `${newWafuStr}（新暦）`));
+        wafuTextLayer.appendChild(createStyledText(stGreText, { class: "layer-gregorian-text", x: baseX, y: cy - 850 + (stWafu.fontSize * 0.9) + (stGreText.offsetRadius || 0), "text-anchor": "end", transform: `rotate(${-globalRotation}, ${cx}, ${cy})` }, `${newWafuStr}（新暦）`));
     }
 }
 
@@ -910,7 +873,7 @@ function drawHaikus(startDate) {
     const st = window.layerSettings.haikuText || window.defaultLayerSettings.haikuText;
     if (!st || st.opacity === 0) return;
 
-    const rBase = concentricRings[concentricRings.length - 1] + 90 + st.offsetRadius;
+    const rBase = concentricRings[concentricRings.length - 1] + 90 + (st.offsetRadius || 0);
     
     for (let i = 0; i < window.currentMonthDays; i++) {
         const dateStr = formatDateStr(new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000));
