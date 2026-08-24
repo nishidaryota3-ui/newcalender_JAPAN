@@ -1,4 +1,4 @@
-// draw.js (SVG描画モジュール) - 月と太陽の出没（オフライン天文学計算）対応版
+// draw.js (SVG描画モジュール) - 矢印アイコン追加＆月太陽4ピン完全独立版
 
 if (typeof window.mansions === 'undefined') {
     window.mansions = [
@@ -9,7 +9,6 @@ if (typeof window.mansions === 'undefined') {
     ];
 }
 
-// 潮汐のオートスケール計算結果をグローバルで保持し、月ピンを潮汐の波に乗せるための変数
 window.currentTideScaleMin = 0;
 window.currentTideScaleMax = 100;
 
@@ -76,6 +75,56 @@ function createStyledText(st, attrs = {}, text = null) {
     return createSVGElem("text", { ...getStyleAttrs(st), ...attrs }, text);
 }
 
+// ▼ 様々な形（矢印含む）をSVGで生成するための汎用関数 ▼
+function drawPinShape(g, shapeType, size, st) {
+    if (shapeType === "none") return;
+    const fillCol = st.fill || "none";
+    const strokeCol = st.stroke || "none";
+    const strokeW = st.strokeWidth || 0;
+
+    let shapeEl = null;
+
+    if (shapeType === "circle") {
+        shapeEl = createSVGElem("circle", { cx: 0, cy: 0, r: size });
+    } else if (shapeType === "rect") {
+        shapeEl = createSVGElem("rect", { x: -size, y: -size, width: size*2, height: size*2, rx: size*0.2 });
+    } else if (shapeType === "triangle") {
+        shapeEl = createSVGElem("polygon", { points: `0,-${size*1.2} ${size*1.1},${size*0.8} -${size*1.1},${size*0.8}` });
+    } else if (shapeType === "rhombus") {
+        shapeEl = createSVGElem("polygon", { points: `0,-${size*1.5} ${size},0 0,${size*1.5} -${size},0` });
+    } else if (shapeType === "star") {
+        let pts = "";
+        for(let k=0; k<10; k++) pts += `${k%2===0 ? size*1.2 : size*0.5 * Math.sin(k*36*Math.PI/180)},${-(k%2===0 ? size*1.2 : size*0.5) * Math.cos(k*36*Math.PI/180)} `;
+        shapeEl = createSVGElem("polygon", { points: pts.trim() });
+    } else if (shapeType === "arrowUp") {
+        // 丸の中に上矢印
+        shapeEl = createSVGElem("g");
+        shapeEl.appendChild(createSVGElem("circle", { cx: 0, cy: 0, r: size }));
+        // 矢印の線 (常にstrokeColorで描画)
+        shapeEl.appendChild(createSVGElem("path", { d: `M0,${size*0.6} L0,-${size*0.6} M-${size*0.5},-0.1 L0,-${size*0.6} L${size*0.5},-0.1`, fill: "none", stroke: strokeCol, "stroke-width": Math.max(0.5, strokeW * 0.8), "stroke-linecap": "round", "stroke-linejoin": "round" }));
+    } else if (shapeType === "arrowDown") {
+        // 丸の中に下矢印
+        shapeEl = createSVGElem("g");
+        shapeEl.appendChild(createSVGElem("circle", { cx: 0, cy: 0, r: size }));
+        // 矢印の線 (常にstrokeColorで描画)
+        shapeEl.appendChild(createSVGElem("path", { d: `M0,-${size*0.6} L0,${size*0.6} M-${size*0.5},0.1 L0,${size*0.6} L${size*0.5},0.1`, fill: "none", stroke: strokeCol, "stroke-width": Math.max(0.5, strokeW * 0.8), "stroke-linecap": "round", "stroke-linejoin": "round" }));
+    }
+
+    if (shapeEl) {
+        // arrow系でgタグだった場合でも、ベースの図形（丸など）には設定を適用
+        if (shapeEl.tagName === 'g') {
+            shapeEl.firstChild.setAttribute("fill", fillCol);
+            shapeEl.firstChild.setAttribute("stroke", strokeCol);
+            shapeEl.firstChild.setAttribute("stroke-width", strokeW);
+        } else {
+            shapeEl.setAttribute("fill", fillCol);
+            shapeEl.setAttribute("stroke", strokeCol);
+            shapeEl.setAttribute("stroke-width", strokeW);
+        }
+        g.appendChild(shapeEl);
+    }
+}
+
 function drawAstronomicalPins(cycleStartTime) {
     const layer = document.getElementById("layer-astronomical-pins");
     if(!layer) return;
@@ -123,19 +172,26 @@ function drawAstronomicalPins(cycleStartTime) {
                     const g = createSVGElem("g", { transform: `translate(${pt.x}, ${pt.y}) rotate(${angle})`, opacity: st.opacity });
                     const R = 3.5 * (st.scale || 1); 
                     
-                    const circle = createSVGElem("circle", { cx: 0, cy: 0, r: R, fill: "none", stroke: st.stroke, "stroke-width": st.strokeWidth });
+                    const shapeType = st.shape || "circle";
                     
-                    if (t.key === 'new') {
-                        circle.setAttribute("fill", st.fill);
-                        g.appendChild(circle);
-                    } else if (t.key === 'full') {
-                        g.appendChild(circle);
-                    } else if (t.key === 'first') {
-                        g.appendChild(createSVGElem("path", { d: `M 0,-${R} A ${R},${R} 0 0,1 0,${R} Z`, fill: st.fill }));
-                        g.appendChild(circle);
-                    } else if (t.key === 'last') {
-                        g.appendChild(createSVGElem("path", { d: `M 0,-${R} A ${R},${R} 0 0,0 0,${R} Z`, fill: st.fill }));
-                        g.appendChild(circle);
+                    // Astronomical Pins（新月・満月など）に新しい図形描画関数を適用
+                    if (shapeType !== "circle") {
+                         drawPinShape(g, shapeType, R, st);
+                    } else {
+                        // 従来の月相欠け表現（上弦・下弦など）を維持する特別処理
+                        const circle = createSVGElem("circle", { cx: 0, cy: 0, r: R, fill: "none", stroke: st.stroke, "stroke-width": st.strokeWidth });
+                        if (t.key === 'new') {
+                            circle.setAttribute("fill", st.fill);
+                            g.appendChild(circle);
+                        } else if (t.key === 'full') {
+                            g.appendChild(circle);
+                        } else if (t.key === 'first') {
+                            g.appendChild(createSVGElem("path", { d: `M 0,-${R} A ${R},${R} 0 0,1 0,${R} Z`, fill: st.fill }));
+                            g.appendChild(circle);
+                        } else if (t.key === 'last') {
+                            g.appendChild(createSVGElem("path", { d: `M 0,-${R} A ${R},${R} 0 0,0 0,${R} Z`, fill: st.fill }));
+                            g.appendChild(circle);
+                        }
                     }
                     layer.appendChild(g);
                 }
@@ -362,77 +418,124 @@ function drawTideGraph(cycleStartTimeMs) {
     }
 }
 
-// ▼▼ 新規追加: 月の出・月の入りを潮汐波線の上にピンで打つ ▼▼
+// 潮汐の近似値（波の高さ）を計算してピンを乗せるための汎用関数
+function getApproxTideAtTime(targetTimeMs) {
+    if (!highLowTidePoints || highLowTidePoints.length === 0) return (window.currentTideScaleMax + window.currentTideScaleMin) / 2;
+    let p1 = highLowTidePoints[0], p2 = highLowTidePoints[highLowTidePoints.length - 1];
+    for(let i=0; i<highLowTidePoints.length - 1; i++) {
+        if (highLowTidePoints[i].time <= targetTimeMs && highLowTidePoints[i+1].time >= targetTimeMs) {
+            p1 = highLowTidePoints[i];
+            p2 = highLowTidePoints[i+1];
+            break;
+        }
+    }
+    if(p1 === p2) return p1.tide;
+    const ratio = (targetTimeMs - p1.time) / (p2.time - p1.time);
+    return p1.tide + (p2.tide - p1.tide) * ratio;
+}
+
+// ▼ 独立した月の出・月の入りピン描画 ▼
 function drawMoonEventPins(cycleStartTimeMs) {
-    const pinLayer = document.getElementById("layer-moon-event-pin");
-    if(pinLayer) pinLayer.innerHTML = "";
+    const riseLayer = document.getElementById("layer-moon-rise");
+    const setLayer = document.getElementById("layer-moon-set");
+    if(riseLayer) riseLayer.innerHTML = "";
+    if(setLayer) setLayer.innerHTML = "";
     if (concentricRings.length < 23) return;
     
-    const st = window.layerSettings.moonEventPin;
-    if(!st || st.opacity === 0) return;
+    const stRise = window.layerSettings.moonRisePin;
+    const stSet = window.layerSettings.moonSetPin;
 
-    // 現在選択されている潮汐観測所の緯度経度を取得（完全同期）
     const station = TIDE_STATIONS[currentTideStationIndex] || {lat: 35.68, lon: 139.76};
-    
-    const rMin = concentricRings[16];
-    const rMax = concentricRings[22];
+    const rMin = concentricRings[16], rMax = concentricRings[22];
     const startAngle = currentStartSegment * 3;
 
-    // 潮汐の近似値（波の高さ）を計算してピンを乗せるための関数
-    const getApproxTideAtTime = (targetTimeMs) => {
-        if (!highLowTidePoints || highLowTidePoints.length === 0) return (window.currentTideScaleMax + window.currentTideScaleMin) / 2;
-        
-        let p1 = highLowTidePoints[0], p2 = highLowTidePoints[highLowTidePoints.length - 1];
-        for(let i=0; i<highLowTidePoints.length - 1; i++) {
-            if (highLowTidePoints[i].time <= targetTimeMs && highLowTidePoints[i+1].time >= targetTimeMs) {
-                p1 = highLowTidePoints[i];
-                p2 = highLowTidePoints[i+1];
-                break;
-            }
-        }
-        if(p1 === p2) return p1.tide;
-        // 線形補間でその時間の潮位を推定
-        const ratio = (targetTimeMs - p1.time) / (p2.time - p1.time);
-        return p1.tide + (p2.tide - p1.tide) * ratio;
-    };
-
     for (let i = 0; i < window.currentMonthDays; i++) {
-        // 毎日のお昼（12時）を基準に、その日の出没を計算
-        const dayDate = new Date(cycleStartTimeMs + i * 86400000 + 43200000);
+        const dayDate = new Date(cycleStartTimeMs + i * 86400000 + 43200000); // 12:00
         const moonTimes = getMoonTimes(dayDate, station.lat, station.lon);
 
         const drawPin = (timeDate, isRise) => {
-            if (!timeDate) return;
+            const st = isRise ? stRise : stSet;
+            const targetLayer = isRise ? riseLayer : setLayer;
+            if (!timeDate || !st || st.opacity === 0 || !targetLayer) return;
+
             const timeMs = timeDate.getTime();
-            // カレンダーの表示期間内かチェック
             if (timeMs < cycleStartTimeMs || timeMs > cycleStartTimeMs + window.currentMonthDays * 86400000) return;
 
             const hours = (timeMs - cycleStartTimeMs) / 3600000;
             const angle = startAngle + hours * 0.5;
             
-            // その時間の潮位を割り出し、半径（波の上の位置）を確定
             const tideVal = getApproxTideAtTime(timeMs);
-            const r = window.getTideRadius(tideVal, rMin, rMax) + st.radiusOffset;
+            const r = window.getTideRadius(tideVal, rMin, rMax) + (st.radiusOffset || 0);
             const pt = polarToCartesian(cx, cy, r, angle);
 
-            // シックなダイヤモンド型（ひし形）のピンを描画
-            const size = 2 * (st.scale || 1);
+            const size = 3 * (st.scale || 1);
             const g = createSVGElem("g", { transform: `translate(${pt.x}, ${pt.y}) rotate(${angle})`, opacity: st.opacity });
             
-            // 出（Rise）は白抜き、入り（Set）は塗りつぶしで区別
-            const fillCol = isRise ? "none" : st.fill;
-            const strokeCol = isRise ? st.fill : st.stroke;
-            
-            g.appendChild(createSVGElem("polygon", {
-                points: `0,-${size*1.5} ${size},0 0,${size*1.5} -${size},0`,
-                fill: fillCol, stroke: strokeCol, "stroke-width": st.strokeWidth || 0.5
-            }));
-            
-            pinLayer.appendChild(g);
+            drawPinShape(g, st.shape || "circle", size, st);
+            targetLayer.appendChild(g);
         };
 
         drawPin(moonTimes.rise, true);
         drawPin(moonTimes.set, false);
+    }
+}
+
+// ▼ 独立した日の出・日の入りピン描画（新月などの節目のみ） ▼
+function drawSunEventPins(startDate) {
+    const riseLayer = document.getElementById("layer-sun-rise");
+    const setLayer = document.getElementById("layer-sun-set");
+    if(riseLayer) riseLayer.innerHTML = "";
+    if(setLayer) setLayer.innerHTML = "";
+    if (concentricRings.length < 23) return;
+
+    const stRise = window.layerSettings.sunRisePin;
+    const stSet = window.layerSettings.sunSetPin;
+
+    const station = TIDE_STATIONS[currentTideStationIndex] || {lat: 35.68, lon: 139.76};
+    const cycleStartTimeMs = startDate.getTime();
+    const rMin = concentricRings[16], rMax = concentricRings[22];
+    const startAngle = currentStartSegment * 3;
+
+    for (let i = 0; i < window.currentMonthDays; i++) {
+        const loopDate = new Date(startDate.getTime() + i * 86400000);
+        const dateStr = formatDateStr(loopDate);
+        const dbRow = koyomiDatabase[dateStr] || [];
+        
+        let isPhaseDay = false;
+        if (dbRow[1]) {
+            const rawLunarDay = (dbRow[1].match(/旧暦.*?月(.+?)日/) || [])[1] || "";
+            if (["一", "八", "十五", "二十三"].includes(rawLunarDay)) isPhaseDay = true;
+        }
+        
+        if (isPhaseDay) {
+            // 日本時間正午（UTC 3:00）を基準にその日の出没を計算
+            const sunTimes = getTimes(new Date(loopDate.getTime() + 43200000), station.lat, station.lon);
+
+            const drawPin = (timeDate, isRise) => {
+                const st = isRise ? stRise : stSet;
+                const targetLayer = isRise ? riseLayer : setLayer;
+                if (!timeDate || !st || st.opacity === 0 || !targetLayer) return;
+
+                const timeMs = timeDate.getTime();
+                if (timeMs < cycleStartTimeMs || timeMs > cycleStartTimeMs + window.currentMonthDays * 86400000) return;
+
+                const hours = (timeMs - cycleStartTimeMs) / 3600000;
+                const angle = startAngle + hours * 0.5;
+                
+                const tideVal = getApproxTideAtTime(timeMs);
+                const r = window.getTideRadius(tideVal, rMin, rMax) + (st.radiusOffset || 0);
+                const pt = polarToCartesian(cx, cy, r, angle);
+
+                const size = 3 * (st.scale || 1);
+                const g = createSVGElem("g", { transform: `translate(${pt.x}, ${pt.y}) rotate(${angle})`, opacity: st.opacity });
+                
+                drawPinShape(g, st.shape || "circle", size, st);
+                targetLayer.appendChild(g);
+            };
+
+            drawPin(sunTimes.sunrise, true);
+            drawPin(sunTimes.sunset, false);
+        }
     }
 }
 
@@ -582,73 +685,6 @@ function getRingInfo(distance) {
         }
     }
     return null;
-}
-
-// ▼▼ 新規追加: 朔望（新月・上弦・満月・下弦）の日に、日の出・日の入り時間をささやかに表示 ▼▼
-function drawSunEventText(startDate) {
-    // 既存の日付レイヤー群に間借りして追加する形をとります（zassetsuGroupを流用するか、専用に追加します）
-    // 今回は initApp で追加済みの "layer-sun-event-text" クラスをつけたテキスト要素を配置します
-    const dateLayer = document.getElementById("layer-solar-dates");
-    if(!dateLayer) return;
-    
-    // もし既存のsunグループがあれば削除、なければ作成
-    let sunGroup = dateLayer.querySelector('.layer-sun-event-text-group');
-    if(sunGroup) sunGroup.remove();
-    sunGroup = createSVGElem("g", { class: "layer-sun-event-text layer-sun-event-text-group" });
-    dateLayer.appendChild(sunGroup);
-
-    if (concentricRings.length < 30) return;
-    const st = window.layerSettings.sunEventText;
-    if(!st || st.opacity === 0) return;
-
-    const station = TIDE_STATIONS[currentTideStationIndex] || {lat: 35.68, lon: 139.76};
-    
-    // 表示場所：新暦日付（gregorian）の少し内側の空きスペース（例えばR29あたり）
-    const R = concentricRings;
-    const rBase = R[28] + st.offsetRadius; 
-
-    // 時間を hh:mm 形式にフォーマット
-    const fmtTime = (date) => {
-        if(!date) return "--:--";
-        return String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0');
-    };
-
-    for (let i = 0; i < window.currentMonthDays; i++) {
-        const loopDate = new Date(startDate.getTime() + i * 86400000);
-        const dateStr = formatDateStr(loopDate);
-        const dbRow = koyomiDatabase[dateStr] || [];
-        
-        // その日が新月・上弦・満月・下弦のいずれかであるかチェック
-        let isPhaseDay = false;
-        if (dbRow[1]) {
-            const rawLunarDay = (dbRow[1].match(/旧暦.*?月(.+?)日/) || [])[1] || "";
-            if (["一", "八", "十五", "二十三"].includes(rawLunarDay)) {
-                isPhaseDay = true;
-            }
-        }
-        
-        if (isPhaseDay) {
-            const sunTimes = getTimes(new Date(loopDate.getTime() + 43200000), station.lat, station.lon);
-            const txt = `日の出 ${fmtTime(sunTimes.sunrise)} / 日の入 ${fmtTime(sunTimes.sunset)}`;
-            
-            // テキストを円弧に沿わせて配置
-            const baseAngle = ((currentStartSegment + i * 4) % 120) * 3;
-            const angStart = baseAngle + 0.5;
-            const angEnd = baseAngle + 11.5;
-            
-            const pathId = `sun_arc_${currentCycle}_${i}`;
-            const p1 = polarToCartesian(cx, cy, rBase, angStart);
-            const p2 = polarToCartesian(cx, cy, rBase, angEnd);
-            
-            const defs = document.getElementById("text-path-defs");
-            if(defs) defs.appendChild(createSVGElem("path", { id: pathId, d: `M ${p1.x} ${p1.y} A ${rBase} ${rBase} 0 0 1 ${p2.x} ${p2.y}` }));
-
-            const textObj = createStyledText(st);
-            const textPath = createSVGElem("textPath", { href: `#${pathId}`, startOffset: "50%", "text-anchor": "middle" }, txt);
-            textObj.appendChild(textPath);
-            sunGroup.appendChild(textObj);
-        }
-    }
 }
 
 function drawKoyomiEvents(startDate) {
