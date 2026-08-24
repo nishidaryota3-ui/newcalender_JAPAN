@@ -1,4 +1,4 @@
-// main.js (司令塔・初期化モジュール) - 完全オフライン（雨CSV対応）版
+// main.js (司令塔・初期化モジュール) - 月と太陽の出没レイヤー追加版
 
 window.defaultLayerSettings = {
     canvasBg: { fill: "#f5f3eb" },
@@ -34,6 +34,8 @@ window.defaultLayerSettings = {
     eventChurch: { fontFamily: "'Shippori Mincho', serif", fontSize: 6.5, fill: "#6b5b4e", fontWeight: "normal", stroke: "#ffffff", strokeWidth: 0, opacity: 1, offsetRadius: 0 },
     eventSonota: { fontFamily: "'Shippori Mincho', serif", fontSize: 6.5, fill: "#555555", fontWeight: "normal", stroke: "#ffffff", strokeWidth: 0, opacity: 1, offsetRadius: 0 },
     haikuText: { fontFamily: "'Shippori Mincho', serif", fontSize: 8, fill: "#2c3e50", fontWeight: "normal", stroke: "#ffffff", strokeWidth: 0, opacity: 1, offsetRadius: 40 },
+    moonEventPin: { fill: "#d4af37", stroke: "rgba(0,0,0,0.5)", strokeWidth: 0.5, opacity: 0.9, scale: 1, radiusOffset: 0 }, // 新規追加: 月の出没ピン
+    sunEventText: { fontFamily: "'Shippori Mincho', serif", fontSize: 5, fill: "#a0a0a0", fontWeight: "normal", stroke: "#ffffff", strokeWidth: 0, opacity: 0.8, offsetRadius: 0 }, // 新規追加: 日の出没文字
     lunar: {
         fontFamily: "'Shippori Mincho', serif", fontSize: 11, fontWeight: "normal", opacity: 1, offsetRadius: 0,
         phases: {
@@ -111,7 +113,6 @@ const KOYOMI_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRqoX31Y
 const HAIKU_CSV_URL = 'https://docs.google.com/spreadsheets/d/1m0y8AOJNx1Ad4I44poPheQAQNki1-QQIwi9wSw8jaBg/export?format=csv&gid=126185184';
 
 
-// ★ 外部APIを完全廃止し、潮汐と雨のCSVを読み込んで処理する関数 ★
 async function fetchMeteoAndTideData(startDateMs) {
     const dStart = new Date(startDateMs);
     const targetYear = dStart.getFullYear(); 
@@ -124,7 +125,6 @@ async function fetchMeteoAndTideData(startDateMs) {
     let rainDataFound = false;
     const sb = document.getElementById('status-bar');
 
-    // 1. 潮汐データの取得 (tidesフォルダから)
     const station = TIDE_STATIONS[currentTideStationIndex];
     const tideCsvName = `tides/tide_${station.code}_${targetYear}.csv`; 
 
@@ -155,7 +155,6 @@ async function fetchMeteoAndTideData(startDateMs) {
         } catch(e) {}
     };
 
-    // 2. 雨データの取得 (rainフォルダから)
     const rainCsvName = `rain/rain_${currentLocationName}_${targetYear}.csv`;
 
     const fetchRain = async () => {
@@ -175,18 +174,15 @@ async function fetchMeteoAndTideData(startDateMs) {
                         const rain = parseFloat(parts[2].trim());
 
                         if (!isNaN(rain)) {
-                            // ① 24時間分を足し算して「日別総降水量」をプログラムで作る
                             if (localRainData[dateStr] === undefined) localRainData[dateStr] = 0;
                             localRainData[dateStr] += rain;
 
-                            // ② タイムスタンプを使って「毎時データ」を記録する
                             const timeMs = new Date(`${dateStr}T${timeStr}+09:00`).getTime();
                             hourlyMap[timeMs] = rain;
                         }
                     }
                 }
                 
-                // 記録した毎時データを、カレンダーの720時間分に正しく割り当てる（ズレを完全解消）
                 for(let h=0; h<720; h++) {
                     const tMs = startDateMs + h * 3600000;
                     apiRainData[h] = hourlyMap[tMs] !== undefined ? hourlyMap[tMs] : null;
@@ -196,10 +192,8 @@ async function fetchMeteoAndTideData(startDateMs) {
         } catch(e) {}
     };
 
-    // 潮と雨のCSVを並行して読み込む
     await Promise.all([fetchTide(), fetchRain()]);
 
-    // 読み込み結果をステータスバーに表示（エラーでクラッシュさせない設計）
     if (sb) {
         let msg = "";
         if (!tideDataFound && !rainDataFound) msg = `⚠️ 潮汐 (${station.name}) と 雨 (${currentLocationName}) のCSVが見つかりません`;
@@ -307,6 +301,10 @@ function updateCalendarCycle() {
         if(typeof drawTideGraph === 'function') drawTideGraph(cycleStartTimeMs); 
         if(typeof drawRainfallGraph === 'function') drawRainfallGraph(cycleStartTimeMs);
         if(typeof drawDailyRainStats === 'function') drawDailyRainStats(startDate);
+        
+        // 潮汐と日付データの準備ができたら、出没の計算と描画を実行
+        if(typeof drawMoonEventPins === 'function') drawMoonEventPins(cycleStartTimeMs);
+        if(typeof drawSunEventText === 'function') drawSunEventText(startDate);
     });
 }
 
@@ -355,7 +353,7 @@ async function initApp() {
         defs.setAttribute("id", "text-path-defs");
         masterGroup.appendChild(defs);
         
-        const layerIds = ["layer-shadow", "layer-astronomical-pins", "layer-lines", "layer-data", "layer-tide-wave", "layer-rain-graph", "layer-daily-rain-bg", "layer-lunar-mansion", "layer-solar-dates", "layer-outer-season", "layer-guide-tide", "layer-guide-rain", "layer-daily-rain-text", "layer-guide-time", "layer-wafu-text", "layer-haiku"];
+        const layerIds = ["layer-shadow", "layer-astronomical-pins", "layer-lines", "layer-data", "layer-tide-wave", "layer-rain-graph", "layer-daily-rain-bg", "layer-lunar-mansion", "layer-solar-dates", "layer-outer-season", "layer-guide-tide", "layer-guide-rain", "layer-daily-rain-text", "layer-guide-time", "layer-wafu-text", "layer-haiku", "layer-moon-event-pin"];
         layerIds.forEach(id => {
             const g = document.createElementNS(svgNS, "g");
             g.setAttribute("id", id);
