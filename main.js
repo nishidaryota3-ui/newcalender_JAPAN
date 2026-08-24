@@ -1,4 +1,4 @@
-// main.js (司令塔・初期化モジュール) - 月と太陽の出没レイヤー追加版
+// main.js (司令塔・初期化モジュール) - 4つの出没ピン（月・太陽）独立設定版
 
 window.defaultLayerSettings = {
     canvasBg: { fill: "#f5f3eb" },
@@ -34,8 +34,13 @@ window.defaultLayerSettings = {
     eventChurch: { fontFamily: "'Shippori Mincho', serif", fontSize: 6.5, fill: "#6b5b4e", fontWeight: "normal", stroke: "#ffffff", strokeWidth: 0, opacity: 1, offsetRadius: 0 },
     eventSonota: { fontFamily: "'Shippori Mincho', serif", fontSize: 6.5, fill: "#555555", fontWeight: "normal", stroke: "#ffffff", strokeWidth: 0, opacity: 1, offsetRadius: 0 },
     haikuText: { fontFamily: "'Shippori Mincho', serif", fontSize: 8, fill: "#2c3e50", fontWeight: "normal", stroke: "#ffffff", strokeWidth: 0, opacity: 1, offsetRadius: 40 },
-    moonEventPin: { fill: "#d4af37", stroke: "rgba(0,0,0,0.5)", strokeWidth: 0.5, opacity: 0.9, scale: 1, radiusOffset: 0 }, // 新規追加: 月の出没ピン
-    sunEventText: { fontFamily: "'Shippori Mincho', serif", fontSize: 5, fill: "#a0a0a0", fontWeight: "normal", stroke: "#ffffff", strokeWidth: 0, opacity: 0.8, offsetRadius: 0 }, // 新規追加: 日の出没文字
+    
+    // ▼ 今回大改修で追加した、4つの独立したピン（月と太陽の出没）のデフォルト設定です ▼
+    moonRisePin: { fill: "none", stroke: "#d4af37", strokeWidth: 1.2, opacity: 1, scale: 1.5, radiusOffset: 0, shape: "arrowUp" },
+    moonSetPin: { fill: "none", stroke: "#d4af37", strokeWidth: 1.2, opacity: 1, scale: 1.5, radiusOffset: 0, shape: "arrowDown" },
+    sunRisePin: { fill: "none", stroke: "#ff8888", strokeWidth: 1.2, opacity: 0.8, scale: 1.5, radiusOffset: 30, shape: "arrowUp" },
+    sunSetPin: { fill: "none", stroke: "#ff8888", strokeWidth: 1.2, opacity: 0.8, scale: 1.5, radiusOffset: 30, shape: "arrowDown" },
+
     lunar: {
         fontFamily: "'Shippori Mincho', serif", fontSize: 11, fontWeight: "normal", opacity: 1, offsetRadius: 0,
         phases: {
@@ -302,9 +307,8 @@ function updateCalendarCycle() {
         if(typeof drawRainfallGraph === 'function') drawRainfallGraph(cycleStartTimeMs);
         if(typeof drawDailyRainStats === 'function') drawDailyRainStats(startDate);
         
-        // 潮汐と日付データの準備ができたら、出没の計算と描画を実行
         if(typeof drawMoonEventPins === 'function') drawMoonEventPins(cycleStartTimeMs);
-        if(typeof drawSunEventText === 'function') drawSunEventText(startDate);
+        if(typeof drawSunEventPins === 'function') drawSunEventPins(startDate); // 文字からピンに変更
     });
 }
 
@@ -353,7 +357,8 @@ async function initApp() {
         defs.setAttribute("id", "text-path-defs");
         masterGroup.appendChild(defs);
         
-        const layerIds = ["layer-shadow", "layer-astronomical-pins", "layer-lines", "layer-data", "layer-tide-wave", "layer-rain-graph", "layer-daily-rain-bg", "layer-lunar-mansion", "layer-solar-dates", "layer-outer-season", "layer-guide-tide", "layer-guide-rain", "layer-daily-rain-text", "layer-guide-time", "layer-wafu-text", "layer-haiku", "layer-moon-event-pin"];
+        // ▼ 4つのピン用のレイヤーを追加定義 ▼
+        const layerIds = ["layer-shadow", "layer-astronomical-pins", "layer-lines", "layer-data", "layer-tide-wave", "layer-rain-graph", "layer-daily-rain-bg", "layer-lunar-mansion", "layer-solar-dates", "layer-outer-season", "layer-guide-tide", "layer-guide-rain", "layer-daily-rain-text", "layer-guide-time", "layer-wafu-text", "layer-haiku", "layer-moon-rise", "layer-moon-set", "layer-sun-rise", "layer-sun-set"];
         layerIds.forEach(id => {
             const g = document.createElementNS(svgNS, "g");
             g.setAttribute("id", id);
