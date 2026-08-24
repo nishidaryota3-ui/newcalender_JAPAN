@@ -1,4 +1,4 @@
-// draw.js (SVG描画モジュール) - 矢印アイコン追加＆月太陽4ピン完全独立版
+// draw.js (SVG描画モジュール) - 矢印アイコン追加＆確実なピン描画（フォールバック実装）版
 
 if (typeof window.mansions === 'undefined') {
     window.mansions = [
@@ -99,24 +99,17 @@ function drawPinShape(g, shapeType, size, st) {
     } else if (shapeType === "arrowUp") {
         // 丸の中に上矢印
         shapeEl = createSVGElem("g");
-        shapeEl.appendChild(createSVGElem("circle", { cx: 0, cy: 0, r: size }));
-        // 矢印の線 (常にstrokeColorで描画)
-        shapeEl.appendChild(createSVGElem("path", { d: `M0,${size*0.6} L0,-${size*0.6} M-${size*0.5},-0.1 L0,-${size*0.6} L${size*0.5},-0.1`, fill: "none", stroke: strokeCol, "stroke-width": Math.max(0.5, strokeW * 0.8), "stroke-linecap": "round", "stroke-linejoin": "round" }));
+        shapeEl.appendChild(createSVGElem("circle", { cx: 0, cy: 0, r: size, fill: fillCol, stroke: strokeCol, "stroke-width": strokeW }));
+        shapeEl.appendChild(createSVGElem("path", { d: `M0,${size*0.5} L0,-${size*0.5} M-${size*0.4},-0.1 L0,-${size*0.5} L${size*0.4},-0.1`, fill: "none", stroke: strokeCol, "stroke-width": Math.max(0.5, strokeW * 0.8), "stroke-linecap": "round", "stroke-linejoin": "round" }));
     } else if (shapeType === "arrowDown") {
         // 丸の中に下矢印
         shapeEl = createSVGElem("g");
-        shapeEl.appendChild(createSVGElem("circle", { cx: 0, cy: 0, r: size }));
-        // 矢印の線 (常にstrokeColorで描画)
-        shapeEl.appendChild(createSVGElem("path", { d: `M0,-${size*0.6} L0,${size*0.6} M-${size*0.5},0.1 L0,${size*0.6} L${size*0.5},0.1`, fill: "none", stroke: strokeCol, "stroke-width": Math.max(0.5, strokeW * 0.8), "stroke-linecap": "round", "stroke-linejoin": "round" }));
+        shapeEl.appendChild(createSVGElem("circle", { cx: 0, cy: 0, r: size, fill: fillCol, stroke: strokeCol, "stroke-width": strokeW }));
+        shapeEl.appendChild(createSVGElem("path", { d: `M0,-${size*0.5} L0,${size*0.5} M-${size*0.4},0.1 L0,${size*0.5} L${size*0.4},0.1`, fill: "none", stroke: strokeCol, "stroke-width": Math.max(0.5, strokeW * 0.8), "stroke-linecap": "round", "stroke-linejoin": "round" }));
     }
 
     if (shapeEl) {
-        // arrow系でgタグだった場合でも、ベースの図形（丸など）には設定を適用
-        if (shapeEl.tagName === 'g') {
-            shapeEl.firstChild.setAttribute("fill", fillCol);
-            shapeEl.firstChild.setAttribute("stroke", strokeCol);
-            shapeEl.firstChild.setAttribute("stroke-width", strokeW);
-        } else {
+        if (shapeEl.tagName.toLowerCase() !== 'g') {
             shapeEl.setAttribute("fill", fillCol);
             shapeEl.setAttribute("stroke", strokeCol);
             shapeEl.setAttribute("stroke-width", strokeW);
@@ -131,7 +124,7 @@ function drawAstronomicalPins(cycleStartTime) {
     layer.innerHTML = "";
     if (concentricRings.length < 30) return;
 
-    const st = window.layerSettings.astroPins;
+    const st = window.layerSettings.astroPins || window.defaultLayerSettings.astroPins;
     if(!st || st.opacity === 0) return;
 
     const rMin = concentricRings[0] + (st.radiusOffset || 0);
@@ -174,11 +167,9 @@ function drawAstronomicalPins(cycleStartTime) {
                     
                     const shapeType = st.shape || "circle";
                     
-                    // Astronomical Pins（新月・満月など）に新しい図形描画関数を適用
                     if (shapeType !== "circle") {
                          drawPinShape(g, shapeType, R, st);
                     } else {
-                        // 従来の月相欠け表現（上弦・下弦など）を維持する特別処理
                         const circle = createSVGElem("circle", { cx: 0, cy: 0, r: R, fill: "none", stroke: st.stroke, "stroke-width": st.strokeWidth });
                         if (t.key === 'new') {
                             circle.setAttribute("fill", st.fill);
@@ -434,7 +425,7 @@ function getApproxTideAtTime(targetTimeMs) {
     return p1.tide + (p2.tide - p1.tide) * ratio;
 }
 
-// ▼ 独立した月の出・月の入りピン描画 ▼
+// ▼ 独立した月の出・月の入りピン描画（フォールバック付き完全版） ▼
 function drawMoonEventPins(cycleStartTimeMs) {
     const riseLayer = document.getElementById("layer-moon-rise");
     const setLayer = document.getElementById("layer-moon-set");
@@ -442,8 +433,9 @@ function drawMoonEventPins(cycleStartTimeMs) {
     if(setLayer) setLayer.innerHTML = "";
     if (concentricRings.length < 23) return;
     
-    const stRise = window.layerSettings.moonRisePin;
-    const stSet = window.layerSettings.moonSetPin;
+    // データがない場合に備えて初期設定を強制的に読み込む安全装置
+    const stRise = window.layerSettings.moonRisePin || window.defaultLayerSettings.moonRisePin;
+    const stSet = window.layerSettings.moonSetPin || window.defaultLayerSettings.moonSetPin;
 
     const station = TIDE_STATIONS[currentTideStationIndex] || {lat: 35.68, lon: 139.76};
     const rMin = concentricRings[16], rMax = concentricRings[22];
@@ -480,7 +472,7 @@ function drawMoonEventPins(cycleStartTimeMs) {
     }
 }
 
-// ▼ 独立した日の出・日の入りピン描画（新月などの節目のみ） ▼
+// ▼ 独立した日の出・日の入りピン描画（新月などの節目のみ・フォールバック付き） ▼
 function drawSunEventPins(startDate) {
     const riseLayer = document.getElementById("layer-sun-rise");
     const setLayer = document.getElementById("layer-sun-set");
@@ -488,8 +480,9 @@ function drawSunEventPins(startDate) {
     if(setLayer) setLayer.innerHTML = "";
     if (concentricRings.length < 23) return;
 
-    const stRise = window.layerSettings.sunRisePin;
-    const stSet = window.layerSettings.sunSetPin;
+    // データがない場合に備えて初期設定を強制的に読み込む安全装置
+    const stRise = window.layerSettings.sunRisePin || window.defaultLayerSettings.sunRisePin;
+    const stSet = window.layerSettings.sunSetPin || window.defaultLayerSettings.sunSetPin;
 
     const station = TIDE_STATIONS[currentTideStationIndex] || {lat: 35.68, lon: 139.76};
     const cycleStartTimeMs = startDate.getTime();
