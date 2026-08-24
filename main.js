@@ -35,7 +35,7 @@ window.defaultLayerSettings = {
     eventSonota: { fontFamily: "'Shippori Mincho', serif", fontSize: 6.5, fill: "#555555", fontWeight: "normal", stroke: "#ffffff", strokeWidth: 0, opacity: 1, offsetRadius: 0 },
     haikuText: { fontFamily: "'Shippori Mincho', serif", fontSize: 8, fill: "#2c3e50", fontWeight: "normal", stroke: "#ffffff", strokeWidth: 0, opacity: 1, offsetRadius: 40 },
     
-    // ▼ 追加: 4つの独立したピン（月と太陽の出没）のデフォルト設定 ▼
+    // ▼ 4つの独立したピン（月と太陽の出没）のデフォルト設定 ▼
     moonRisePin: { fill: "none", stroke: "#d4af37", strokeWidth: 1.2, opacity: 1, scale: 1.5, radiusOffset: 0, shape: "arrowUp" },
     moonSetPin: { fill: "none", stroke: "#d4af37", strokeWidth: 1.2, opacity: 1, scale: 1.5, radiusOffset: 0, shape: "arrowDown" },
     sunRisePin: { fill: "none", stroke: "#ff8888", strokeWidth: 1.2, opacity: 0.8, scale: 1.5, radiusOffset: 30, shape: "arrowUp" },
@@ -307,9 +307,9 @@ function updateCalendarCycle() {
         if(typeof drawRainfallGraph === 'function') drawRainfallGraph(cycleStartTimeMs);
         if(typeof drawDailyRainStats === 'function') drawDailyRainStats(startDate);
         
-        // ▼ 新規追加: 4つのピンの描画を呼び出す ▼
+        // ピンの描画を呼び出す
         if(typeof drawMoonEventPins === 'function') drawMoonEventPins(cycleStartTimeMs);
-        if(typeof drawSunEventPins === 'function') drawSunEventPins(startDate);
+        if(typeof drawSunEventPins === 'function') drawSunEventPins(startDate); 
     });
 }
 
@@ -358,7 +358,7 @@ async function initApp() {
         defs.setAttribute("id", "text-path-defs");
         masterGroup.appendChild(defs);
         
-        // ▼ 4つのピン用のレイヤーを追加定義 ▼
+        // ▼ 4つの出没ピン用のレイヤーを追加定義 ▼
         const layerIds = ["layer-shadow", "layer-astronomical-pins", "layer-lines", "layer-data", "layer-tide-wave", "layer-rain-graph", "layer-daily-rain-bg", "layer-lunar-mansion", "layer-solar-dates", "layer-outer-season", "layer-guide-tide", "layer-guide-rain", "layer-daily-rain-text", "layer-guide-time", "layer-wafu-text", "layer-haiku", "layer-moon-rise", "layer-moon-set", "layer-sun-rise", "layer-sun-set"];
         layerIds.forEach(id => {
             const g = document.createElementNS(svgNS, "g");
