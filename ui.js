@@ -1,4 +1,4 @@
-// ui.js (UI構築・イベントモジュール) - 4つの出没ピン・矢印形状完全対応版
+// ui.js (UI構築・イベントモジュール) - 完全修正版
 
 const TEXT_TARGETS = ['gregorian', 'weekday', 'sekki', 'kou', 'zassetsu', 'holiday', 'important', 'wafuText', 'gregorianText', 'dailyRainText', 'guideTime', 'guideTideText', 'guideRainText', 'lunarMansion', 'eventShinto', 'eventBuddhism', 'eventChurch', 'eventSonota', 'lunar', 'haikuText'];
 const SHAPE_TARGETS = ['baseSvg', 'lunarShadow', 'astroPins', 'dateLines', 'tideGraph', 'rainGraph', 'dailyRainBg', 'guideTideLine', 'guideRainLine', 'canvasBg', 'moonRisePin', 'moonSetPin', 'sunRisePin', 'sunSetPin'];
@@ -177,7 +177,6 @@ function initUI() {
     designPanel.className = 'panel-ui';
     designPanel.style = "display:none; position:fixed; top:100px; left:50%; background:rgba(25,30,40,0.95); padding:0 20px 20px 20px; border-radius:12px; border:1px solid rgba(212,175,55,0.5); color:#fff; z-index:200; box-shadow:0 10px 40px rgba(0,0,0,0.8); min-width:320px; backdrop-filter:blur(10px);";
     
-    // ▼ ここに「ひし形」「上矢印」「下矢印」などの選択肢を明記したHTMLを登録しています ▼
     designPanel.innerHTML = `
         <div id="dp-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid rgba(212,175,55,0.3); padding:12px 0 10px 0; cursor:grab; user-select:none;">
             <div id="dp-title" style="color:#d4af37; font-weight:bold; font-size:15px;">デザイン設定</div>
@@ -248,6 +247,8 @@ function initUI() {
                     <select id="dp-shape" style="background:#222; color:#fff; border:1px solid #555; padding:4px; border-radius:4px; width:120px;">
                         <option value="none">なし</option>
                         <option value="circle">丸 (●)</option>
+                        <option value="halfRight">右半月 (☽)</option>
+                        <option value="halfLeft">左半月 (☾)</option>
                         <option value="rect">四角 (■)</option>
                         <option value="triangle">三角 (▲)</option>
                         <option value="rhombus">ひし形 (◆)</option>
@@ -261,7 +262,7 @@ function initUI() {
                     <span id="dp-shape-scale-val" style="width:30px; text-align:right;">1</span>
                 </label>
                 <label id="dp-row-radius-offset" style="display:none; justify-content:space-between; align-items:center;">配置位置 (半径ズラし): 
-                    <input type="range" id="dp-radius-offset" min="-150" max="150" step="1" style="width:100px; accent-color:#d4af37;">
+                    <input type="range" id="dp-radius-offset" min="-1000" max="1000" step="1" style="width:100px; accent-color:#d4af37;">
                     <span id="dp-radius-offset-val" style="width:30px; text-align:right;">0</span>
                 </label>
                 <label id="dp-row-density" style="display:none; justify-content:space-between; align-items:center;">グラデーション濃度: 
@@ -386,7 +387,6 @@ function initUI() {
     let currentDesignTarget = null;
     
     const loadPanelData = () => {
-        // 設定データが取得できない場合はデフォルト値を強制使用（フェイルセーフ）
         const st = window.layerSettings[currentDesignTarget] || window.defaultLayerSettings[currentDesignTarget];
         if (!st) return;
 
@@ -403,7 +403,52 @@ function initUI() {
         const isTextTarget = TEXT_TARGETS.includes(currentDesignTarget);
         const isShapeTarget = SHAPE_TARGETS.includes(currentDesignTarget);
 
-        if (isTextTarget) {
+        if (currentDesignTarget === 'lunar' || currentDesignTarget === 'astroPins') {
+            document.getElementById('dp-row-lunar-phase').style.display = 'flex';
+            document.getElementById('dp-group-shape').style.display = 'flex';
+            document.getElementById('dp-row-shape-type').style.display = 'flex';
+            document.getElementById('dp-row-shape-scale').style.display = 'flex';
+            document.getElementById('dp-row-shape-fill').style.display = 'flex';
+            document.getElementById('dp-row-shape-stroke').style.display = 'flex';
+            document.getElementById('dp-row-shape-stroke-width').style.display = 'flex';
+
+            const phaseSelect = document.getElementById('dp-lunar-phase');
+            if (currentDesignTarget === 'astroPins') {
+                if(phaseSelect.value === 'normal') phaseSelect.value = 'newMoon';
+                phaseSelect.querySelector('option[value="normal"]').style.display = 'none';
+            } else {
+                phaseSelect.querySelector('option[value="normal"]').style.display = 'block';
+            }
+
+            const pst = st.phases ? st.phases[phaseSelect.value] : st;
+            
+            if (currentDesignTarget === 'lunar') {
+                document.getElementById('dp-group-text').style.display = 'flex';
+                document.getElementById('dp-color').value = pst.fill || "#2c3e50";
+            } else {
+                document.getElementById('dp-group-text').style.display = 'none';
+            }
+            
+            document.getElementById('dp-shape').value = pst.shape || (currentDesignTarget==='astroPins' ? 'circle' : 'none');
+            document.getElementById('dp-shape-scale').value = pst.scale || 1;
+            document.getElementById('dp-shape-scale-val').innerText = pst.scale || 1;
+            
+            const currentFill = currentDesignTarget === 'lunar' ? pst.bgFill : pst.fill;
+            document.getElementById('dp-shape-fill-trans').checked = (currentFill === "transparent" || currentFill === "none");
+            if(currentFill !== "transparent" && currentFill !== "none") document.getElementById('dp-shape-fill').value = currentFill;
+            
+            document.getElementById('dp-shape-stroke').value = pst.shapeStroke !== undefined ? pst.shapeStroke : (pst.stroke || "#555555");
+            document.getElementById('dp-shape-stroke-width').value = pst.shapeStrokeWidth !== undefined ? pst.shapeStrokeWidth : (pst.strokeWidth || 0);
+            document.getElementById('dp-shape-stroke-width-val').innerText = pst.shapeStrokeWidth !== undefined ? pst.shapeStrokeWidth : (pst.strokeWidth || 0);
+
+            if (currentDesignTarget === 'astroPins') {
+                document.getElementById('dp-row-radius-offset').style.display = 'flex';
+                document.getElementById('dp-radius-offset').value = st.radiusOffset !== undefined ? st.radiusOffset : 0;
+                document.getElementById('dp-radius-offset-val').innerText = st.radiusOffset !== undefined ? st.radiusOffset : 0;
+            }
+        }
+
+        if (isTextTarget && currentDesignTarget !== 'lunar') {
             document.getElementById('dp-group-text').style.display = 'flex';
             if(st.offsetRadius !== undefined) {
                 document.getElementById('dp-row-offset').style.display = 'flex';
@@ -412,13 +457,11 @@ function initUI() {
             document.getElementById('dp-font').value = st.fontFamily || "Arial";
             document.getElementById('dp-size').value = st.fontSize || 10;
             
-            if (currentDesignTarget !== 'lunar') {
-                document.getElementById('dp-color').value = st.fill || "#ffffff";
-                document.getElementById('dp-bold').checked = st.fontWeight === "bold";
-                document.getElementById('dp-stroke-color').value = st.stroke || "#000000";
-                document.getElementById('dp-stroke-width').value = st.strokeWidth || 0;
-                document.getElementById('dp-stroke-val').innerText = st.strokeWidth || 0;
-            }
+            document.getElementById('dp-color').value = st.fill || "#ffffff";
+            document.getElementById('dp-bold').checked = st.fontWeight === "bold";
+            document.getElementById('dp-stroke-color').value = st.stroke || "#000000";
+            document.getElementById('dp-stroke-width').value = st.strokeWidth || 0;
+            document.getElementById('dp-stroke-val').innerText = st.strokeWidth || 0;
         }
 
         if (currentDesignTarget === 'weekday') {
@@ -446,11 +489,16 @@ function initUI() {
         if (currentDesignTarget === 'canvasBg') {
             document.getElementById('dp-group-shape').style.display = 'flex';
             document.getElementById('dp-row-shape-fill').style.display = 'flex';
-            document.getElementById('dp-shape-fill-trans').checked = (st.fill === "none" || st.fill === "transparent");
+            // キャンバス背景の場合は透明チェックボックスを非表示に
+            document.getElementById('dp-shape-fill-trans').style.display = 'none';
+            document.getElementById('dp-shape-fill-trans-text').style.display = 'none';
             if (st.fill !== "none" && st.fill !== "transparent") document.getElementById('dp-shape-fill').value = st.fill;
+        } else {
+            document.getElementById('dp-shape-fill-trans').style.display = 'inline-block';
+            document.getElementById('dp-shape-fill-trans-text').style.display = 'inline-block';
         }
 
-        if(isShapeTarget && currentDesignTarget !== 'canvasBg') {
+        if(isShapeTarget && currentDesignTarget !== 'canvasBg' && currentDesignTarget !== 'astroPins') {
             document.getElementById('dp-group-shape').style.display = 'flex';
             
             if (currentDesignTarget === 'dailyRainBg') {
@@ -472,15 +520,16 @@ function initUI() {
                     document.getElementById('dp-shape-stroke-orig-text').style.display = 'inline-block';
                     document.getElementById('dp-shape-stroke-orig').checked = (st.stroke !== "");
                     document.getElementById('dp-shape-stroke').value = st.stroke || "#000000";
+                    document.getElementById('dp-shape-stroke-width').value = st.strokeWidth !== undefined ? st.strokeWidth : 0.5;
+                    document.getElementById('dp-shape-stroke-width-val').innerText = st.strokeWidth !== undefined ? st.strokeWidth : 0.5;
                 } else {
                     document.getElementById('dp-shape-stroke').value = st.stroke || "#000000";
-                    // 確実に線の太さを表示
                     document.getElementById('dp-shape-stroke-width').value = st.strokeWidth !== undefined ? st.strokeWidth : 0;
                     document.getElementById('dp-shape-stroke-width-val').innerText = st.strokeWidth !== undefined ? st.strokeWidth : 0;
                 }
             }
 
-            if (['astroPins', 'moonRisePin', 'moonSetPin', 'sunRisePin', 'sunSetPin'].includes(currentDesignTarget)) {
+            if (['moonRisePin', 'moonSetPin', 'sunRisePin', 'sunSetPin'].includes(currentDesignTarget)) {
                 document.getElementById('dp-row-shape-type').style.display = 'flex';
                 document.getElementById('dp-shape').value = st.shape || "circle";
                 
@@ -491,30 +540,6 @@ function initUI() {
                 document.getElementById('dp-radius-offset').value = st.radiusOffset !== undefined ? st.radiusOffset : 0;
                 document.getElementById('dp-radius-offset-val').innerText = st.radiusOffset !== undefined ? st.radiusOffset : 0;
             }
-        }
-
-        if (currentDesignTarget === 'lunar') {
-            document.getElementById('dp-row-lunar-phase').style.display = 'flex';
-            document.getElementById('dp-group-shape').style.display = 'flex';
-            document.getElementById('dp-row-shape-type').style.display = 'flex';
-            document.getElementById('dp-row-shape-scale').style.display = 'flex';
-            document.getElementById('dp-row-shape-fill').style.display = 'flex';
-            document.getElementById('dp-row-shape-stroke').style.display = 'flex';
-            document.getElementById('dp-row-shape-stroke-width').style.display = 'flex';
-
-            const pst = st.phases[document.getElementById('dp-lunar-phase').value];
-            document.getElementById('dp-color').value = pst.fill || "#2c3e50";
-            
-            document.getElementById('dp-shape').value = pst.shape || "none";
-            document.getElementById('dp-shape-scale').value = pst.scale || 1;
-            document.getElementById('dp-shape-scale-val').innerText = pst.scale || 1;
-            
-            document.getElementById('dp-shape-fill-trans').checked = (pst.bgFill === "transparent" || pst.bgFill === "none");
-            if(pst.bgFill !== "transparent" && pst.bgFill !== "none") document.getElementById('dp-shape-fill').value = pst.bgFill;
-            
-            document.getElementById('dp-shape-stroke').value = pst.shapeStroke || "#555555";
-            document.getElementById('dp-shape-stroke-width').value = pst.shapeStrokeWidth || 0;
-            document.getElementById('dp-shape-stroke-width-val').innerText = pst.shapeStrokeWidth || 0;
         }
     };
 
@@ -527,18 +552,16 @@ function initUI() {
             document.getElementById('dp-opacity-val').innerText = st.opacity;
         }
 
-        if (TEXT_TARGETS.includes(currentDesignTarget)) {
+        if (TEXT_TARGETS.includes(currentDesignTarget) && currentDesignTarget !== 'lunar') {
             st.fontFamily = document.getElementById('dp-font').value;
             st.fontSize = parseFloat(document.getElementById('dp-size').value);
             if(st.offsetRadius !== undefined) st.offsetRadius = parseFloat(document.getElementById('dp-offset').value);
             
-            if (currentDesignTarget !== 'lunar') {
-                st.fill = document.getElementById('dp-color').value;
-                st.fontWeight = document.getElementById('dp-bold').checked ? "bold" : "normal";
-                st.stroke = document.getElementById('dp-stroke-color').value;
-                st.strokeWidth = parseFloat(document.getElementById('dp-stroke-width').value);
-                document.getElementById('dp-stroke-val').innerText = st.strokeWidth;
-            }
+            st.fill = document.getElementById('dp-color').value;
+            st.fontWeight = document.getElementById('dp-bold').checked ? "bold" : "normal";
+            st.stroke = document.getElementById('dp-stroke-color').value;
+            st.strokeWidth = parseFloat(document.getElementById('dp-stroke-width').value);
+            document.getElementById('dp-stroke-val').innerText = st.strokeWidth;
         }
 
         if (currentDesignTarget === 'weekday') st.lang = document.getElementById('dp-lang').value;
@@ -561,10 +584,10 @@ function initUI() {
             document.body.style.backgroundColor = st.fill;
         }
 
-        if(SHAPE_TARGETS.includes(currentDesignTarget) && currentDesignTarget !== 'canvasBg') {
+        if(SHAPE_TARGETS.includes(currentDesignTarget) && currentDesignTarget !== 'canvasBg' && currentDesignTarget !== 'astroPins') {
             if(st.fill !== undefined) st.fill = document.getElementById('dp-shape-fill-trans').checked ? "none" : document.getElementById('dp-shape-fill').value;
             
-            if (['astroPins', 'moonRisePin', 'moonSetPin', 'sunRisePin', 'sunSetPin'].includes(currentDesignTarget)) {
+            if (['moonRisePin', 'moonSetPin', 'sunRisePin', 'sunSetPin'].includes(currentDesignTarget)) {
                 st.shape = document.getElementById('dp-shape').value;
                 st.scale = parseFloat(document.getElementById('dp-shape-scale').value);
                 document.getElementById('dp-shape-scale-val').innerText = st.scale;
@@ -574,6 +597,7 @@ function initUI() {
 
             if(currentDesignTarget === 'baseSvg') {
                 st.stroke = document.getElementById('dp-shape-stroke-orig').checked ? document.getElementById('dp-shape-stroke').value : "";
+                st.strokeWidth = parseFloat(document.getElementById('dp-shape-stroke-width').value);
             } else if (currentDesignTarget !== 'dailyRainBg') {
                 if(st.stroke !== undefined) st.stroke = document.getElementById('dp-shape-stroke').value;
                 if(st.strokeWidth !== undefined) st.strokeWidth = parseFloat(document.getElementById('dp-shape-stroke-width').value);
@@ -581,16 +605,35 @@ function initUI() {
             if(document.getElementById('dp-shape-stroke-width-val')) document.getElementById('dp-shape-stroke-width-val').innerText = document.getElementById('dp-shape-stroke-width').value;
         }
 
-        if (currentDesignTarget === 'lunar') {
-            const pst = st.phases[document.getElementById('dp-lunar-phase').value];
-            pst.fill = document.getElementById('dp-color').value;
-            st.fontWeight = document.getElementById('dp-bold').checked ? "bold" : "normal";
+        if (currentDesignTarget === 'lunar' || currentDesignTarget === 'astroPins') {
+            if (!st.phases) {
+                st.phases = {
+                    newMoon: { shape: "circle", fill: "none", shapeStroke: "#000000", shapeStrokeWidth: 1.2, scale: 1 },
+                    firstQuarter: { shape: "halfRight", fill: "none", shapeStroke: "#000000", shapeStrokeWidth: 1.2, scale: 1 },
+                    fullMoon: { shape: "circle", fill: "none", shapeStroke: "#000000", shapeStrokeWidth: 1.2, scale: 1 },
+                    lastQuarter: { shape: "halfLeft", fill: "none", shapeStroke: "#000000", shapeStrokeWidth: 1.2, scale: 1 }
+                };
+            }
+            const phaseSelect = document.getElementById('dp-lunar-phase').value;
+            const pst = st.phases[phaseSelect];
             
             pst.shape = document.getElementById('dp-shape').value;
             pst.scale = parseFloat(document.getElementById('dp-shape-scale').value);
             document.getElementById('dp-shape-scale-val').innerText = pst.scale;
             
-            pst.bgFill = document.getElementById('dp-shape-fill-trans').checked ? "transparent" : document.getElementById('dp-shape-fill').value;
+            const isTrans = document.getElementById('dp-shape-fill-trans').checked;
+            const fillColor = isTrans ? (currentDesignTarget === 'lunar' ? "transparent" : "none") : document.getElementById('dp-shape-fill').value;
+            
+            if (currentDesignTarget === 'lunar') {
+                pst.fill = document.getElementById('dp-color').value; 
+                st.fontWeight = document.getElementById('dp-bold').checked ? "bold" : "normal";
+                pst.bgFill = fillColor;
+            } else {
+                pst.fill = fillColor;
+                st.radiusOffset = parseFloat(document.getElementById('dp-radius-offset').value);
+                document.getElementById('dp-radius-offset-val').innerText = st.radiusOffset;
+            }
+            
             pst.shapeStroke = document.getElementById('dp-shape-stroke').value;
             pst.shapeStrokeWidth = parseFloat(document.getElementById('dp-shape-stroke-width').value);
             document.getElementById('dp-shape-stroke-width-val').innerText = pst.shapeStrokeWidth;
@@ -638,11 +681,19 @@ function initUI() {
             if(bgGroup) {
                 bgGroup.style.opacity = window.layerSettings.baseSvg.opacity;
                 Array.from(bgGroup.querySelectorAll('*')).forEach(el => {
-                    if (window.layerSettings.baseSvg.stroke !== "") el.setAttribute('stroke', window.layerSettings.baseSvg.stroke);
-                    else {
+                    if (window.layerSettings.baseSvg.stroke && window.layerSettings.baseSvg.stroke !== "") {
+                        el.setAttribute('stroke', window.layerSettings.baseSvg.stroke);
+                        if (window.layerSettings.baseSvg.strokeWidth !== undefined && window.layerSettings.baseSvg.strokeWidth > 0) {
+                            el.setAttribute('stroke-width', window.layerSettings.baseSvg.strokeWidth);
+                        }
+                    } else {
                         const orig = el.getAttribute('data-orig-stroke');
                         if(orig) el.setAttribute('stroke', orig);
                         else el.removeAttribute('stroke');
+                        
+                        const origW = el.getAttribute('data-orig-stroke-width');
+                        if (origW) el.setAttribute('stroke-width', origW);
+                        else el.removeAttribute('stroke-width');
                     }
                 });
             }
