@@ -1,10 +1,18 @@
-// main.js (司令塔・初期化モジュール) - 絶対防壁（エラー分離）アーキテクチャ版
+// main.js (司令塔・初期化モジュール) - 完全修正版
 
 window.defaultLayerSettings = {
     canvasBg: { fill: "#f5f3eb" },
-    baseSvg: { stroke: "", opacity: 0.8 },
+    baseSvg: { stroke: "", strokeWidth: 0.5, opacity: 0.8 },
     lunarShadow: { fill: "#000000", opacity: 0.03 },
-    astroPins: { fill: "#d4af37", stroke: "#d4af37", strokeWidth: 1.2, opacity: 1, scale: 1, radiusOffset: 0 },
+    astroPins: { 
+        opacity: 1, radiusOffset: 0,
+        phases: {
+            newMoon:      { shape: "circle", fill: "none", shapeStroke: "#000000", shapeStrokeWidth: 1.2, scale: 1 },
+            firstQuarter: { shape: "halfRight", fill: "none", shapeStroke: "#000000", shapeStrokeWidth: 1.2, scale: 1 },
+            fullMoon:     { shape: "circle", fill: "none", shapeStroke: "#000000", shapeStrokeWidth: 1.2, scale: 1 },
+            lastQuarter:  { shape: "halfLeft", fill: "none", shapeStroke: "#000000", shapeStrokeWidth: 1.2, scale: 1 }
+        }
+    },
     dateLines: { stroke: "#555555", strokeWidth: 1.5, opacity: 1 },
     lunarMansion: {
         strokeWidth: 0.5, opacity: 0.5, fontFamily: "'Shippori Mincho', 'YuMincho', serif", fontSize: 9,
@@ -217,7 +225,6 @@ async function loadAllData() {
     }
 }
 
-// ▼ どんなエラーが起きてもアプリを絶対に殺さないための安全ラッパー関数 ▼
 function safeExecute(taskName, fn) {
     try {
         if (typeof fn === 'function') fn();
@@ -258,7 +265,6 @@ function updateCalendarCycle() {
 
     safeExecute('computeMonthDays', () => computeMonthDays(startDate));
 
-    // 全ての描画処理を防爆扉（safeExecute）で包み、道連れクラッシュを完全に防ぎます
     safeExecute('drawLunarShadow', () => drawLunarShadow(cycleStartTimeMs));
     safeExecute('drawAstronomicalPins', () => drawAstronomicalPins(cycleStartTimeMs));
     safeExecute('drawDynamicLines', () => drawDynamicLines());
@@ -274,11 +280,19 @@ function updateCalendarCycle() {
             const stBase = window.layerSettings.baseSvg || window.defaultLayerSettings.baseSvg;
             bgGroup.style.opacity = stBase.opacity !== undefined ? stBase.opacity : 1;
             Array.from(bgGroup.querySelectorAll('*')).forEach(el => {
-                if (stBase.stroke) el.setAttribute('stroke', stBase.stroke);
-                else {
+                if (stBase.stroke && stBase.stroke !== "") {
+                    el.setAttribute('stroke', stBase.stroke);
+                    if (stBase.strokeWidth !== undefined && stBase.strokeWidth > 0) {
+                        el.setAttribute('stroke-width', stBase.strokeWidth);
+                    }
+                } else {
                     const orig = el.getAttribute('data-orig-stroke');
                     if (orig) el.setAttribute('stroke', orig);
                     else el.removeAttribute('stroke');
+                    
+                    const origW = el.getAttribute('data-orig-stroke-width');
+                    if (origW) el.setAttribute('stroke-width', origW);
+                    else el.removeAttribute('stroke-width');
                 }
             });
         }
@@ -328,8 +342,10 @@ async function initApp() {
             const child = svg.firstChild;
             if (child.nodeType === 1) { 
                 if (child.getAttribute('stroke')) child.setAttribute('data-orig-stroke', child.getAttribute('stroke'));
+                if (child.getAttribute('stroke-width')) child.setAttribute('data-orig-stroke-width', child.getAttribute('stroke-width'));
                 child.querySelectorAll('*').forEach(el => {
                     if (el.getAttribute('stroke')) el.setAttribute('data-orig-stroke', el.getAttribute('stroke'));
+                    if (el.getAttribute('stroke-width')) el.setAttribute('data-orig-stroke-width', el.getAttribute('stroke-width'));
                 });
             }
             bgGroup.appendChild(child);
@@ -349,8 +365,6 @@ async function initApp() {
         });
         
         updateCalendarCycle();
-        
-        // どんなエラーがあっても、マウスのズームなどの操作機能は必ず起動させる
         safeExecute('initInteractions', () => initInteractions());
         
     } catch(err) {
