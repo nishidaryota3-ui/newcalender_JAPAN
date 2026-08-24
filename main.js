@@ -1,4 +1,4 @@
-// main.js (司令塔・初期化モジュール) - 4つの出没ピン（月・太陽）独立設定版
+// main.js (司令塔・初期化モジュール) - 絶対防壁（エラー分離）アーキテクチャ版
 
 window.defaultLayerSettings = {
     canvasBg: { fill: "#f5f3eb" },
@@ -34,13 +34,10 @@ window.defaultLayerSettings = {
     eventChurch: { fontFamily: "'Shippori Mincho', serif", fontSize: 6.5, fill: "#6b5b4e", fontWeight: "normal", stroke: "#ffffff", strokeWidth: 0, opacity: 1, offsetRadius: 0 },
     eventSonota: { fontFamily: "'Shippori Mincho', serif", fontSize: 6.5, fill: "#555555", fontWeight: "normal", stroke: "#ffffff", strokeWidth: 0, opacity: 1, offsetRadius: 0 },
     haikuText: { fontFamily: "'Shippori Mincho', serif", fontSize: 8, fill: "#2c3e50", fontWeight: "normal", stroke: "#ffffff", strokeWidth: 0, opacity: 1, offsetRadius: 40 },
-    
-    // ▼ 4つの独立した出没ピンのデフォルト設定 ▼
     moonRisePin: { fill: "none", stroke: "#d4af37", strokeWidth: 1.2, opacity: 1, scale: 1.5, radiusOffset: 0, shape: "arrowUp" },
     moonSetPin: { fill: "none", stroke: "#d4af37", strokeWidth: 1.2, opacity: 1, scale: 1.5, radiusOffset: 0, shape: "arrowDown" },
     sunRisePin: { fill: "none", stroke: "#ff8888", strokeWidth: 1.2, opacity: 0.8, scale: 1.5, radiusOffset: 30, shape: "arrowUp" },
     sunSetPin: { fill: "none", stroke: "#ff8888", strokeWidth: 1.2, opacity: 0.8, scale: 1.5, radiusOffset: 30, shape: "arrowDown" },
-
     lunar: {
         fontFamily: "'Shippori Mincho', serif", fontSize: 11, fontWeight: "normal", opacity: 1, offsetRadius: 0,
         phases: {
@@ -117,25 +114,20 @@ let koyomiDatabase = {};
 const KOYOMI_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRqoX31YV0YAO3Mq4WatmLhjP7uUSF6dPMy3D2H3ktEFDFg1X1gJmoIXkul9JpS4aLgK9Ze3SSbV9BZ/pub?gid=0&single=true&output=csv';
 const HAIKU_CSV_URL = 'https://docs.google.com/spreadsheets/d/1m0y8AOJNx1Ad4I44poPheQAQNki1-QQIwi9wSw8jaBg/export?format=csv&gid=126185184';
 
-
 async function fetchMeteoAndTideData(startDateMs) {
     const dStart = new Date(startDateMs);
     const targetYear = dStart.getFullYear(); 
-    
     apiRainData = new Array(720).fill(null);
     localRainData = {}; 
     highLowTidePoints = []; 
-    
     let tideDataFound = false;
     let rainDataFound = false;
     const sb = document.getElementById('status-bar');
-
     const station = TIDE_STATIONS[currentTideStationIndex];
-    const tideCsvName = `tides/tide_${station.code}_${targetYear}.csv`; 
 
     const fetchTide = async () => {
         try {
-            const res = await fetch(tideCsvName);
+            const res = await fetch(`tides/tide_${station.code}_${targetYear}.csv`);
             if (res.ok) {
                 const txt = await res.text();
                 const lines = txt.split('\n');
@@ -146,9 +138,7 @@ async function fetchMeteoAndTideData(startDateMs) {
                         const timeMs = new Date(`${dateStr}T${parts[1].trim()}:00+09:00`).getTime();
                         if (timeMs >= startDateMs && timeMs <= startDateMs + 30 * 86400000) {
                             const tide = parseFloat(parts[2].trim());
-                            if (!isNaN(timeMs) && !isNaN(tide)) {
-                                highLowTidePoints.push({ time: timeMs, tide: tide });
-                            }
+                            if (!isNaN(timeMs) && !isNaN(tide)) highLowTidePoints.push({ time: timeMs, tide: tide });
                         }
                     }
                 }
@@ -157,44 +147,36 @@ async function fetchMeteoAndTideData(startDateMs) {
                     tideDataFound = true;
                 }
             }
-        } catch(e) {}
+        } catch(e) { console.warn("Tide fetch error", e); }
     };
-
-    const rainCsvName = `rain/rain_${currentLocationName}_${targetYear}.csv`;
 
     const fetchRain = async () => {
         try {
-            const res = await fetch(rainCsvName);
+            const res = await fetch(`rain/rain_${currentLocationName}_${targetYear}.csv`);
             if (res.ok) {
                 const txt = await res.text();
                 const lines = txt.split('\n');
-                
                 const hourlyMap = {};
-
                 for (let i = 1; i < lines.length; i++) {
                     const parts = lines[i].split(',');
                     if (parts.length >= 3) {
                         const dateStr = standardizeDateKey(parts[0]);
                         const timeStr = parts[1].trim();
                         const rain = parseFloat(parts[2].trim());
-
                         if (!isNaN(rain)) {
                             if (localRainData[dateStr] === undefined) localRainData[dateStr] = 0;
                             localRainData[dateStr] += rain;
-
-                            const timeMs = new Date(`${dateStr}T${timeStr}+09:00`).getTime();
-                            hourlyMap[timeMs] = rain;
+                            hourlyMap[new Date(`${dateStr}T${timeStr}+09:00`).getTime()] = rain;
                         }
                     }
                 }
-                
                 for(let h=0; h<720; h++) {
                     const tMs = startDateMs + h * 3600000;
                     apiRainData[h] = hourlyMap[tMs] !== undefined ? hourlyMap[tMs] : null;
                 }
                 rainDataFound = true;
             }
-        } catch(e) {}
+        } catch(e) { console.warn("Rain fetch error", e); }
     };
 
     await Promise.all([fetchTide(), fetchRain()]);
@@ -205,25 +187,16 @@ async function fetchMeteoAndTideData(startDateMs) {
         else if (!tideDataFound) msg = `⚠️ 潮汐 (${station.name}) のCSVが見つかりません (tidesフォルダを確認)`;
         else if (!rainDataFound) msg = `⚠️ 雨 (${currentLocationName}) のCSVが見つかりません (rainフォルダを確認)`;
         else msg = `✅ ${station.name}の潮汐 ＋ ${currentLocationName}の雨 を描画しました`;
-        
         sb.innerText = msg;
         sb.style.color = (tideDataFound && rainDataFound) ? "#38bdf8" : "#ff8888";
     }
 }
 
-
 async function loadAllData() {
     const fetchCSV = async (url) => {
-        try {
-            const res = await fetch(url);
-            return res.ok ? await res.text() : null;
-        } catch(e) { return null; }
+        try { const res = await fetch(url); return res.ok ? await res.text() : null; } catch(e) { return null; }
     };
-
-    const [koyomiTxt, haikuTxt] = await Promise.all([
-        fetchCSV(KOYOMI_CSV_URL), fetchCSV(HAIKU_CSV_URL)
-    ]);
-
+    const [koyomiTxt, haikuTxt] = await Promise.all([fetchCSV(KOYOMI_CSV_URL), fetchCSV(HAIKU_CSV_URL)]);
     if (koyomiTxt) {
         const lines = koyomiTxt.split('\n');
         for (let i = 1; i < lines.length; i++) {
@@ -231,7 +204,6 @@ async function loadAllData() {
             if (row[0]) koyomiDatabase[standardizeDateKey(row[0])] = row;
         }
     }
-
     if (haikuTxt) {
         const lines = haikuTxt.split('\n');
         for (let i = 1; i < lines.length; i++) {
@@ -242,6 +214,15 @@ async function loadAllData() {
                 window.haikuDatabase[dateKey].push(row[0]);
             }
         }
+    }
+}
+
+// ▼ どんなエラーが起きてもアプリを絶対に殺さないための安全ラッパー関数 ▼
+function safeExecute(taskName, fn) {
+    try {
+        if (typeof fn === 'function') fn();
+    } catch (e) {
+        console.error(`[機能エラー分離] ${taskName} の描画中に問題が発生したためスキップしました。`, e);
     }
 }
 
@@ -271,44 +252,47 @@ function updateCalendarCycle() {
     if (cycleDisplay) cycleDisplay.innerHTML = `${targetYear}年 ${startDate.getMonth() + 1}月 <span style="font-size:10px;">▼</span><br><span style="font-size:11px; color:#8b949e;">新月: ${startDate.getMonth() + 1}月${startDate.getDate()}日〜</span>`;
 
     if (window.lastCheckedTideYear !== targetYear) {
-        if (typeof window.checkAvailableTides === 'function') {
-            window.checkAvailableTides(targetYear);
-        }
+        safeExecute('checkAvailableTides', () => window.checkAvailableTides(targetYear));
         window.lastCheckedTideYear = targetYear;
     }
 
-    computeMonthDays(startDate);
+    safeExecute('computeMonthDays', () => computeMonthDays(startDate));
 
-    drawLunarShadow(cycleStartTimeMs);
-    drawAstronomicalPins(cycleStartTimeMs);
-    drawDynamicLines();
-    drawLunarMansions(cycleStartTimeMs);
-    renderSavedData();
-    drawTimeLabels();
-    drawKoyomiEvents(startDate);
-    drawHaikus(startDate);
+    // 全ての描画処理を防爆扉（safeExecute）で包み、道連れクラッシュを完全に防ぎます
+    safeExecute('drawLunarShadow', () => drawLunarShadow(cycleStartTimeMs));
+    safeExecute('drawAstronomicalPins', () => drawAstronomicalPins(cycleStartTimeMs));
+    safeExecute('drawDynamicLines', () => drawDynamicLines());
+    safeExecute('drawLunarMansions', () => drawLunarMansions(cycleStartTimeMs));
+    safeExecute('renderSavedData', () => renderSavedData());
+    safeExecute('drawTimeLabels', () => drawTimeLabels());
+    safeExecute('drawKoyomiEvents', () => drawKoyomiEvents(startDate));
+    safeExecute('drawHaikus', () => drawHaikus(startDate));
 
-    if (masterGroup) masterGroup.setAttribute('transform', `rotate(${globalRotation}, ${cx}, ${cy})`);
-    if (bgGroup) {
-        const stBase = window.layerSettings.baseSvg;
-        bgGroup.style.opacity = stBase.opacity;
-        Array.from(bgGroup.querySelectorAll('*')).forEach(el => {
-            if (stBase.stroke) el.setAttribute('stroke', stBase.stroke);
-            else {
-                const orig = el.getAttribute('data-orig-stroke');
-                if (orig) el.setAttribute('stroke', orig);
-                else el.removeAttribute('stroke');
-            }
-        });
-    }
+    safeExecute('applyMasterTransform', () => {
+        if (masterGroup) masterGroup.setAttribute('transform', `rotate(${globalRotation}, ${cx}, ${cy})`);
+        if (bgGroup) {
+            const stBase = window.layerSettings.baseSvg || window.defaultLayerSettings.baseSvg;
+            bgGroup.style.opacity = stBase.opacity !== undefined ? stBase.opacity : 1;
+            Array.from(bgGroup.querySelectorAll('*')).forEach(el => {
+                if (stBase.stroke) el.setAttribute('stroke', stBase.stroke);
+                else {
+                    const orig = el.getAttribute('data-orig-stroke');
+                    if (orig) el.setAttribute('stroke', orig);
+                    else el.removeAttribute('stroke');
+                }
+            });
+        }
+    });
 
     fetchMeteoAndTideData(cycleStartTimeMs).then(() => {
-        if(typeof drawTideGraph === 'function') drawTideGraph(cycleStartTimeMs); 
-        if(typeof drawRainfallGraph === 'function') drawRainfallGraph(cycleStartTimeMs);
-        if(typeof drawDailyRainStats === 'function') drawDailyRainStats(startDate);
+        safeExecute('drawTideGraph', () => drawTideGraph(cycleStartTimeMs)); 
+        safeExecute('drawRainfallGraph', () => drawRainfallGraph(cycleStartTimeMs));
+        safeExecute('drawDailyRainStats', () => drawDailyRainStats(startDate));
         
-        if(typeof drawMoonEventPins === 'function') drawMoonEventPins(cycleStartTimeMs);
-        if(typeof drawSunEventPins === 'function') drawSunEventPins(startDate); 
+        safeExecute('drawMoonEventPins', () => drawMoonEventPins(cycleStartTimeMs));
+        safeExecute('drawSunEventPins', () => drawSunEventPins(startDate)); 
+    }).catch(e => {
+        console.error("fetchMeteoAndTideData の処理全体で致命的エラー", e);
     });
 }
 
@@ -357,7 +341,6 @@ async function initApp() {
         defs.setAttribute("id", "text-path-defs");
         masterGroup.appendChild(defs);
         
-        // ▼ 4つの出没ピン用のレイヤーを追加定義 ▼
         const layerIds = ["layer-shadow", "layer-astronomical-pins", "layer-lines", "layer-data", "layer-tide-wave", "layer-rain-graph", "layer-daily-rain-bg", "layer-lunar-mansion", "layer-solar-dates", "layer-outer-season", "layer-guide-tide", "layer-guide-rain", "layer-daily-rain-text", "layer-guide-time", "layer-wafu-text", "layer-haiku", "layer-moon-rise", "layer-moon-set", "layer-sun-rise", "layer-sun-set"];
         layerIds.forEach(id => {
             const g = document.createElementNS(svgNS, "g");
@@ -366,7 +349,9 @@ async function initApp() {
         });
         
         updateCalendarCycle();
-        initInteractions();
+        
+        // どんなエラーがあっても、マウスのズームなどの操作機能は必ず起動させる
+        safeExecute('initInteractions', () => initInteractions());
         
     } catch(err) {
         console.error("SVG Init Error:", err);
