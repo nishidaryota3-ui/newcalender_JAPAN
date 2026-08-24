@@ -1,4 +1,4 @@
-// globals.js (全体のデータと状態の管理) - 出没計算バグ修正版
+// globals.js (全体のデータと状態の管理) - 月の出没計算 完全数学的修正版
 
 const container = document.getElementById('container');
 const statusBar = document.getElementById('status-bar');
@@ -42,8 +42,7 @@ let localRainData = {};
 let apiRainData = [];
 let highLowTidePoints = []; 
 
-// ▼ 天文学計算用エンジン (SunCalc 完全修正版) ▼
-// 日本時間のバグを修正し、JSのInfinity仕様を正しく機能させるように元のアルゴリズムに戻しました
+// ▼ 天文学計算用エンジン (SunCalc 完全数学的修正版) ▼
 const PI = Math.PI, rad = PI / 180.0, e = rad * 23.4397;
 function toJulian(date) { return date.valueOf() / 86400000 - 0.5 + 2440588; }
 function fromJulian(j) { return new Date((j + 0.5 - 2440588) * 86400000); }
@@ -80,22 +79,31 @@ function getMoonTimes(date, lat, lng) {
     for (var i = 1; i <= 24; i += 2) {
         h1 = getMoonPosition(new Date(t.valueOf() + i * 3600000), lat, lng).altitude - hc;
         h2 = getMoonPosition(new Date(t.valueOf() + (i + 1) * 3600000), lat, lng).altitude - hc;
-        // ▼ 余計な安全装置を外し、JS本来のInfinity仕様を活かして正確に計算する形に戻しました ▼
+        
+        // ▼ NaN発生を防ぐ完璧な数学的修正：カーブがゼロ(a=0)の場合は一次方程式として解く ▼
         a = (h0 + h2) / 2 - h1; 
         b = (h2 - h0) / 2; 
-        xe = -b / (2 * a); 
-        ye = (a * xe + b) * xe + h1; 
-        d = b * b - 4 * a * h1; 
         roots = 0;
-        
-        if (d >= 0) {
-            dx = Math.sqrt(d) / (Math.abs(a) * 2);
-            x1 = xe - dx; 
-            x2 = xe + dx;
-            if (Math.abs(x1) <= 1) roots++;
-            if (Math.abs(x2) <= 1) roots++;
-            if (x1 < -1) x1 = x2;
+
+        if (a === 0) {
+            if (b !== 0) {
+                x1 = -h1 / b;
+                if (Math.abs(x1) <= 1) roots++;
+            }
+        } else {
+            xe = -b / (2 * a); 
+            ye = (a * xe + b) * xe + h1; 
+            d = b * b - 4 * a * h1; 
+            if (d >= 0) {
+                dx = Math.sqrt(d) / (Math.abs(a) * 2);
+                x1 = xe - dx; 
+                x2 = xe + dx;
+                if (Math.abs(x1) <= 1) roots++;
+                if (Math.abs(x2) <= 1) roots++;
+                if (x1 < -1) x1 = x2;
+            }
         }
+
         if (roots === 1) {
             if (h0 < 0) rise = i + x1; else set = i + x1;
         } else if (roots === 2) {
