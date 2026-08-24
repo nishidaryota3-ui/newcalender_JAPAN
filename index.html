@@ -14,8 +14,6 @@
 <body>
     <div class="calendar-container" id="container"></div>
 
-    <!-- 古い #palette は完全に削除しました -->
-
     <div id="layer-panel">
         <div class="layer-panel-title" style="display:flex; justify-content:space-between; align-items:center;">
             <span>レイヤーパネル</span>
@@ -47,6 +45,13 @@
             <!-- 天文学的ピン -->
             <div class="layer-item"><input type="checkbox" id="toggle-astro-pins" checked><label for="toggle-astro-pins">天文学的ピン (朔望)</label><button class="layer-settings-btn" data-target="astroPins" title="デザイン設定">⚙️</button></div>
             <div class="layer-item"><input type="checkbox" id="toggle-layer-lunar" checked><label for="toggle-layer-lunar">二十七宿 (一番外周)</label><button class="layer-settings-btn" data-target="lunarMansion" title="デザイン設定">⚙️</button></div>
+
+            <!-- ▼ 新規追加: 天文学自動計算による出没ピン ▼ -->
+            <div class="layer-group-title">▼ 出没ピン (天文学自動計算)</div>
+            <div class="layer-item layer-indent"><input type="checkbox" id="toggle-moon-rise" checked><label for="toggle-moon-rise">月の出 (ピン)</label><button class="layer-settings-btn" data-target="moonRisePin" title="デザイン設定">⚙️</button></div>
+            <div class="layer-item layer-indent"><input type="checkbox" id="toggle-moon-set" checked><label for="toggle-moon-set">月の入 (ピン)</label><button class="layer-settings-btn" data-target="moonSetPin" title="デザイン設定">⚙️</button></div>
+            <div class="layer-item layer-indent"><input type="checkbox" id="toggle-sun-rise" checked><label for="toggle-sun-rise">日の出 (ピン)</label><button class="layer-settings-btn" data-target="sunRisePin" title="デザイン設定">⚙️</button></div>
+            <div class="layer-item layer-indent"><input type="checkbox" id="toggle-sun-set" checked><label for="toggle-sun-set">日の入 (ピン)</label><button class="layer-settings-btn" data-target="sunSetPin" title="デザイン設定">⚙️</button></div>
 
             <!-- グラフデータ -->
             <div class="layer-group-title">▼ グラフ・データ</div>
